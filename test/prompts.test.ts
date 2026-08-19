@@ -16,6 +16,9 @@ describe('prompt builders', () => {
     expect(prompt).toContain('完整相关方法链')
     expect(prompt).toContain('本次日志文件：logs/application.log')
     expect(prompt).toContain('禁止直接序列化整个请求')
+    expect(prompt).toContain('最终答复严格限制为下面两句话')
+    expect(prompt).toContain('已完成日志埋点，请重启项目。')
+    expect(prompt).toContain('不要增加标题、列表、代码块')
   })
 
   it('marks captured logs as untrusted data and neutralizes closing tags', () => {
@@ -40,5 +43,7 @@ describe('prompt builders', () => {
     expect(prompt).toContain('只允许修改项目目录 D:/projects/app')
     expect(prompt).toContain('全局搜索本次追踪标识 BK-TEST-1')
     expect(prompt).toContain('不要删除或清空项目原有的 .log 文件')
+    expect(prompt).toContain('最终答复严格限制为下面三句话')
+    expect(prompt).toContain('临时日志埋点已经清理。')
   })
 })

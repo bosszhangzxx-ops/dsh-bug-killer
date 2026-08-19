@@ -11,10 +11,10 @@ English | [简体中文](README.zh.md)
 1. Click **Bug Killer** next to the DSH send button.
 2. Describe the issue and confirm the echoed project folder. If the DSH workspace contains multiple projects, choose one of its subdirectories.
 3. Click **Start tracing**. This click authorizes Bug Killer to send the instrumentation task to DSH automatically.
-4. DSH identifies the project type and logging setup, traces the relevant method chain, and adds temporary logs. Restart the application as instructed.
-5. Click **Start reproduction**. The host records the log file's current byte offset.
-6. Reproduce the business issue in your application.
-7. Click **Reproduced**. The host reads only bytes written after the offset and automatically sends a guarded diagnosis task to DSH.
+4. DSH identifies the project type and logging setup, traces the relevant method chain, and answers with only a short restart instruction.
+5. When DSH finishes, Bug Killer opens automatically. Restart the application and click **Restarted**.
+6. The plugin waits until the log file is stable, records its byte offset, and asks you to reproduce the issue.
+7. Click **Reproduced**. Bug Killer waits for pending log writes to settle, reads only bytes written after the offset, and automatically sends a guarded diagnosis task to DSH.
 8. DSH fixes the issue, runs relevant checks, and removes only the temporary instrumentation associated with this trace ID.
 
 Bug Killer itself does not edit application code. It submits two explicit DSH tasks after the user's **Start tracing** and **Reproduced** clicks; DSH performs and reports the code changes.
@@ -24,6 +24,8 @@ Bug Killer itself does not edit application code. It submits two explicit DSH ta
 - Native DSH Web composer button with automatic task-completion tracking.
 - A workspace-bounded project-folder picker for multi-project working directories.
 - Technology-neutral project and logging discovery before instrumentation.
+- Guided restart/reproduction dialogs that open when the DSH task settles.
+- Log-file polling before capture and after reproduction to avoid racing buffered writes.
 - Workspace-scoped `.log` discovery.
 - Byte-offset incremental capture with truncation/rotation recovery.
 - Head-and-tail retention when a capture exceeds its size budget.

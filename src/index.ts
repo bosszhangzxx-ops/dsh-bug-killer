@@ -59,6 +59,10 @@ export function createRpcHandler(manager: LogCaptureManager) {
           const projectCwd = await resolveProjectDirectory(body.rootCwd ?? body.cwd, body.cwd)
           return success(await manager.discoverLogs(projectCwd))
         }
+        case RPC_ENDPOINTS.probe: {
+          const projectCwd = await resolveProjectDirectory(body.rootCwd ?? body.cwd, body.cwd)
+          return success(await manager.probeLog(projectCwd, body.logPath))
+        }
         case RPC_ENDPOINTS.start: {
           const projectCwd = await resolveProjectDirectory(body.rootCwd ?? body.cwd, body.cwd)
           return success(await manager.start(body.sessionId, projectCwd, body.logPath))

@@ -4,6 +4,7 @@ export const RPC_ENDPOINTS = {
   health: 'health',
   listDirectories: 'directories/list',
   discover: 'logs/discover',
+  probe: 'logs/probe',
   start: 'capture/start',
   finish: 'capture/finish',
   cancel: 'capture/cancel',
@@ -28,6 +29,19 @@ export interface DirectoryListing {
 }
 
 export interface DiscoveredLog {
+  relativePath: string
+  size: number
+  modifiedAt: number
+}
+
+export interface ProbeLogRequest {
+  cwd: string
+  rootCwd?: string
+  logPath: string
+}
+
+export interface LogProbeResult {
+  exists: boolean
   relativePath: string
   size: number
   modifiedAt: number

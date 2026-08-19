@@ -15,6 +15,7 @@
 - Symbolic-link escapes and `..` traversal do not pass the containment check.
 - Only regular files are accepted.
 - Captures have a bounded byte budget.
+- Readiness polling inspects only file existence, size, and modification time inside the selected project; it does not expose log contents until reproduction is finished.
 - Common credentials and authorization values are redacted before the result crosses into the browser.
 - Captured lines are escaped, prefixed as evidence, and wrapped in an explicit untrusted-data section.
 - Generated prompts forbid following instructions from logs, accessing paths outside the workspace, destructive commands, and unrelated refactors.

@@ -18,6 +18,7 @@ describe('Bug Killer browser flow', () => {
   })
 
   it('walks from issue form to capture and puts guarded evidence in the composer', async () => {
+    let captureStarted = false
     const rpc = vi.fn(async (
       _channel: string,
       endpoint: string,
@@ -35,6 +36,7 @@ describe('Bug Killer browser flow', () => {
         }
       }
       if (endpoint === RPC_ENDPOINTS.start) {
+        captureStarted = true
         return {
           ok: true,
           value: {
@@ -42,6 +44,17 @@ describe('Bug Killer browser flow', () => {
             relativePath: 'logs/application.log',
             startOffset: 128,
             startedAt: 1_700_000_000_000,
+          },
+        }
+      }
+      if (endpoint === RPC_ENDPOINTS.probe) {
+        return {
+          ok: true,
+          value: {
+            exists: true,
+            relativePath: 'logs/application.log',
+            size: captureStarted ? 188 : 128,
+            modifiedAt: captureStarted ? 2_000 : 1_000,
           },
         }
       }
@@ -93,10 +106,13 @@ describe('Bug Killer browser flow', () => {
     view.rerender(React.createElement(Component, props))
     props.session.running = false
     view.rerender(React.createElement(Component, props))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Bug Killer · 待复现/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Bug Killer · 待重启/ })).toBeTruthy())
+    expect(screen.getByText('已完成日志埋点，请重启项目')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /Bug Killer · 待复现/ }))
-    fireEvent.click(screen.getByRole('button', { name: '开始复现' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Bug Killer · 待重启/ }))
+    fireEvent.click(screen.getByRole('button', { name: '已重启' }))
     await waitFor(() => expect(rpc).toHaveBeenCalledWith(
       '/bug-killer',
       RPC_ENDPOINTS.start,
@@ -106,13 +122,13 @@ describe('Bug Killer browser flow', () => {
         logPath: 'logs/application.log',
       }),
       undefined,
-    ))
+    ), { timeout: 3_000 })
 
-    fireEvent.click(screen.getByRole('button', { name: /Bug Killer/ }))
-    expect(await screen.findByText('正在等待你复现问题')).toBeTruthy()
+    expect(await screen.findByText('请复现刚才出现的问题', {}, { timeout: 3_000 })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Bug Killer · 未发现问题/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '已复现' }))
 
-    await waitFor(() => expect(setDraft).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(setDraft).toHaveBeenCalledTimes(2), { timeout: 3_000 })
     const finalPrompt = setDraft.mock.calls[1]?.[0] as string
     expect(finalPrompt).toContain('<untrusted_log_evidence>')
     expect(finalPrompt).toContain('step=approve result=false')
@@ -124,7 +140,7 @@ describe('Bug Killer browser flow', () => {
     view.rerender(React.createElement(Component, props))
     props.session.running = false
     view.rerender(React.createElement(Component, props))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Bug Killer · 已完成/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Bug Killer · 已定位问题/ })).toBeTruthy())
   })
 
   it('keeps the form to one textbox and selects a child project inside the workspace', async () => {

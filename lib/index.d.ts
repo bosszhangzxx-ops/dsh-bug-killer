@@ -6,6 +6,7 @@ declare const RPC_ENDPOINTS: {
   readonly health: "health";
   readonly listDirectories: "directories/list";
   readonly discover: "logs/discover";
+  readonly probe: "logs/probe";
   readonly start: "capture/start";
   readonly finish: "capture/finish";
   readonly cancel: "capture/cancel";
@@ -26,6 +27,17 @@ interface DirectoryListing {
   directories: ProjectDirectory[];
 }
 interface DiscoveredLog {
+  relativePath: string;
+  size: number;
+  modifiedAt: number;
+}
+interface ProbeLogRequest {
+  cwd: string;
+  rootCwd?: string;
+  logPath: string;
+}
+interface LogProbeResult {
+  exists: boolean;
   relativePath: string;
   size: number;
   modifiedAt: number;
@@ -92,6 +104,7 @@ declare class LogCaptureManager {
   private readonly config;
   constructor(config: CaptureManagerConfig);
   discoverLogs(cwdInput: unknown): Promise<DiscoveredLog[]>;
+  probeLog(cwdInput: unknown, logPathInput: unknown): Promise<LogProbeResult>;
   start(sessionInput: unknown, cwdInput: unknown, logPathInput: unknown): Promise<CaptureStartResult>;
   finish(sessionInput: unknown): Promise<CaptureFinishResult>;
   cancel(sessionInput: unknown): {
@@ -147,4 +160,4 @@ declare module '@deepseek-ai/cordis' {
 declare function apply(ctx: Context, config: Config): void;
 declare function createRpcHandler(manager: LogCaptureManager): (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>;
 //#endregion
-export { type CaptureFinishResult, type CaptureStartResult, type CaptureStatusRequest, type CaptureStatusResult, Config, type DirectoryListing, type DiscoverLogsRequest, type DiscoveredLog, type FinishCaptureRequest, LogCaptureManager, type ProjectDirectory, type RPC_CHANNEL, type RPC_ENDPOINTS, type RpcErrorShape, type RpcResult, type StartCaptureRequest, apply, buildDiagnosisPrompt, buildInstrumentationPrompt, createRpcHandler, inject, listProjectDirectories, name, redactLogSecrets, resolveProjectDirectory, resolveWorkspaceFile };
+export { type CaptureFinishResult, type CaptureStartResult, type CaptureStatusRequest, type CaptureStatusResult, Config, type DirectoryListing, type DiscoverLogsRequest, type DiscoveredLog, type FinishCaptureRequest, LogCaptureManager, type LogProbeResult, type ProbeLogRequest, type ProjectDirectory, type RPC_CHANNEL, type RPC_ENDPOINTS, type RpcErrorShape, type RpcResult, type StartCaptureRequest, apply, buildDiagnosisPrompt, buildInstrumentationPrompt, createRpcHandler, inject, listProjectDirectories, name, redactLogSecrets, resolveProjectDirectory, resolveWorkspaceFile };

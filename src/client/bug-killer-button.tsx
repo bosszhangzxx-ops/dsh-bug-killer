@@ -7,6 +7,7 @@ import {
   type CaptureStatusResult,
   type DirectoryListing,
   type DiscoveredLog,
+  type LogProbeResult,
 } from '../contracts.ts'
 import {
   buildDiagnosisPrompt,
@@ -16,7 +17,7 @@ import {
 } from '../prompts.ts'
 import type { BugKillerButtonProps, ClientConnectionLike } from './types.ts'
 
-type Stage = 'setup' | 'instrumenting' | 'instrumented' | 'capturing' | 'fixing' | 'complete' | 'failed'
+type Stage = 'setup' | 'instrumenting' | 'restartRequired' | 'checkingLog' | 'capturing' | 'settlingLogs' | 'noIssue' | 'fixing' | 'complete' | 'failed'
 
 interface StoredState {
   issue: string
@@ -24,6 +25,7 @@ interface StoredState {
   logPath: string
   traceId: string
   stage: Stage
+  captureStartOffset?: number
   failedTask?: 'instrumentation' | 'diagnosis'
   startedAt?: number
 }
@@ -63,11 +65,13 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
         if (props.session.running) instrumentationRan.current = true
         if (!props.session.running && instrumentationRan.current) {
           instrumentationRan.current = false
-          setStored(current => current.stage === 'instrumenting'
-            ? props.session.promptError == null
-              ? { ...current, stage: 'instrumented' }
+          setStored(current => {
+            if (current.stage !== 'instrumenting') return current
+            return props.session.promptError == null
+              ? { ...current, stage: 'restartRequired' }
               : { ...current, stage: 'failed', failedTask: 'instrumentation' }
-            : current)
+          })
+          setOpen(true)
         }
       }
       if (stored.stage === 'fixing') {
@@ -102,9 +106,10 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       ).then((status) => {
         if (!status.active) {
           setStored((current) => {
-            if (current.stage !== 'capturing') return current
-            const next: StoredState = { ...current, stage: 'instrumented' }
+            if (current.stage !== 'checkingLog' && current.stage !== 'capturing' && current.stage !== 'settlingLogs' && current.stage !== 'noIssue') return current
+            const next: StoredState = { ...current, stage: 'restartRequired' }
             delete next.startedAt
+            delete next.captureStartOffset
             return next
           })
           return
@@ -113,6 +118,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           ...current,
           stage: 'capturing',
           logPath: status.relativePath ?? current.logPath,
+          ...(status.startOffset === undefined ? {} : { captureStartOffset: status.startOffset }),
           ...(status.startedAt === undefined ? {} : { startedAt: status.startedAt }),
         }))
       }).catch(() => {
@@ -148,7 +154,8 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           cwd: stored.projectPath,
         })
         const traceId = createTraceId()
-        const logPath = found[0]?.relativePath ?? 'logs/bug-killer.log'
+        const selectedLog = found[0]
+        const logPath = selectedLog?.relativePath ?? 'logs/bug-killer.log'
         const description: BugDescription = {
           issue: stored.issue,
           projectPath: stored.projectPath,
@@ -157,8 +164,15 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
         }
         instrumentationRan.current = false
         setStored(current => {
-          const next: StoredState = { ...current, traceId, logPath, stage: 'instrumenting' }
+          const next: StoredState = {
+            ...current,
+            traceId,
+            logPath,
+            stage: 'instrumenting',
+          }
           delete next.failedTask
+          delete next.startedAt
+          delete next.captureStartOffset
           return next
         })
         setOpen(false)
@@ -182,29 +196,27 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       }
       setBusy(true)
       setError('')
+      setStored(current => ({ ...current, stage: 'checkingLog' }))
       try {
-        const found = await callRpc<DiscoveredLog[]>(connection, RPC_ENDPOINTS.discover, {
-          rootCwd: cwd,
-          cwd: stored.projectPath,
-        })
-        const logPath = found.some(log => log.relativePath === stored.logPath)
-          ? stored.logPath
-          : found[0]?.relativePath ?? stored.logPath
+        await waitForStableLog(() => probeLog(connection, cwd, stored.projectPath, stored.logPath))
         const result = await callRpc<CaptureStartResult>(connection, RPC_ENDPOINTS.start, {
           sessionId: props.sessionId,
           rootCwd: cwd,
           cwd: stored.projectPath,
-          logPath,
+          logPath: stored.logPath,
         })
         setStored(current => ({
           ...current,
           stage: 'capturing',
           logPath: result.relativePath,
           startedAt: result.startedAt,
+          captureStartOffset: result.startOffset,
         }))
-        setOpen(false)
       } catch (reason) {
         setError(messageOf(reason))
+        setStored(current => current.stage === 'checkingLog'
+          ? { ...current, stage: 'restartRequired' }
+          : current)
       } finally {
         setBusy(false)
       }
@@ -221,12 +233,17 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       }
       setBusy(true)
       setError('')
+      setStored(current => ({ ...current, stage: 'settlingLogs' }))
       try {
+        await waitForReproductionLog(
+          () => probeLog(connection, cwd, stored.projectPath, stored.logPath),
+          stored.captureStartOffset ?? 0,
+        )
         const result = await callRpc<CaptureFinishResult>(connection, RPC_ENDPOINTS.finish, {
           sessionId: props.sessionId,
         })
         if (result.empty) {
-          setError('没有捕获到新增日志。请确认项目正在写入该文件，然后继续复现并再次点击“已复现”。')
+          setStored(current => ({ ...current, stage: 'noIssue' }))
           return
         }
         const description: BugDescription = {
@@ -245,30 +262,16 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
         submitPrompt(props, buildDiagnosisPrompt(description, result))
       } catch (reason) {
         setError(messageOf(reason))
-      } finally {
-        setBusy(false)
-      }
-    }
-
-    const cancelCapture = async (): Promise<void> => {
-      setBusy(true)
-      setError('')
-      try {
-        await callRpc(connection, RPC_ENDPOINTS.cancel, { sessionId: props.sessionId })
-        setStored((current) => {
-          const next: StoredState = { ...current, stage: 'instrumented' }
-          delete next.startedAt
-          return next
-        })
-      } catch (reason) {
-        setError(messageOf(reason))
+        setStored(current => current.stage === 'settlingLogs'
+          ? { ...current, stage: 'capturing' }
+          : current)
       } finally {
         setBusy(false)
       }
     }
 
     const reset = async (): Promise<void> => {
-      if (stored.stage === 'capturing') {
+      if (stored.stage === 'capturing' || stored.stage === 'settlingLogs' || stored.stage === 'noIssue') {
         try {
           await callRpc(connection, RPC_ENDPOINTS.cancel, { sessionId: props.sessionId })
         } catch (reason) {
@@ -307,6 +310,10 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
     }
 
     const statusLabel = labelFor(stored.stage)
+    const statusLive = stored.stage === 'instrumenting'
+      || stored.stage === 'checkingLog'
+      || stored.stage === 'settlingLogs'
+      || stored.stage === 'fixing'
     const trigger = h(
       'button',
       {
@@ -319,7 +326,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           setOpen(true)
         },
       },
-      h('span', { className: `dbk-dot${stored.stage === 'capturing' ? ' dbk-dot-live' : ''}` }),
+      h('span', { className: `dbk-dot${statusLive ? ' dbk-dot-live' : ''}` }),
       h('span', null, `Bug Killer${statusLabel === '' ? '' : ` · ${statusLabel}`}`),
     )
 
@@ -380,9 +387,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           startTracking,
           startReproduction,
           finishReproduction,
-          cancelCapture,
           reset,
-          edit: () => patchStored({ stage: 'setup', traceId: '', logPath: '' }),
           close: () => setOpen(false),
         }),
       ),
@@ -406,20 +411,32 @@ function renderBody(
     closeDirectoryPicker(): void
   },
 ): React.ReactNode {
-  if (state.stage === 'capturing') {
+  if (state.stage === 'capturing' || state.stage === 'noIssue') {
     return h(
       'div',
       { className: 'dbk-card' },
-      h('div', { className: 'dbk-live-row' }, h('span', { className: 'dbk-dot dbk-dot-live' }), '正在等待你复现问题'),
-      h('p', null, '插件已经记录日志文件的字节位置。现在去前台完整复现一次业务问题，回来后点击“已复现”。'),
-      h(
-        'div',
-        { className: 'dbk-meta' },
-        h('span', { className: 'dbk-meta-key' }, '日志文件'),
-        h('span', { className: 'dbk-meta-value' }, state.logPath),
-        h('span', { className: 'dbk-meta-key' }, '开始时间'),
-        h('span', { className: 'dbk-meta-value' }, state.startedAt === undefined ? '刚刚' : new Date(state.startedAt).toLocaleString()),
-      ),
+      h('h3', { className: 'dbk-card-title' }, state.stage === 'noIssue' ? '暂未发现问题' : '请复现刚才出现的问题'),
+      h('p', null, state.stage === 'noIssue'
+        ? '暂时没有检测到新增日志。请再次完整复现问题，完成后点击“已复现”。'
+        : '日志已经准备好并记录起点。请去业务页面复现问题，完成后点击“已复现”。'),
+    )
+  }
+
+  if (state.stage === 'checkingLog') {
+    return h(
+      'div',
+      { className: 'dbk-card' },
+      h('div', { className: 'dbk-live-row' }, h('span', { className: 'dbk-dot dbk-dot-live' }), '正在等待日志文件就绪'),
+      h('p', null, '项目刚启动时日志可能尚未写完，Bug Killer 正在自动检查，无需重复点击。'),
+    )
+  }
+
+  if (state.stage === 'settlingLogs') {
+    return h(
+      'div',
+      { className: 'dbk-card' },
+      h('div', { className: 'dbk-live-row' }, h('span', { className: 'dbk-dot dbk-dot-live' }), '正在等待复现日志写入完成'),
+      h('p', null, '检测到日志稳定后会自动读取，并把证据交给 DSH。'),
     )
   }
 
@@ -437,17 +454,12 @@ function renderBody(
     )
   }
 
-  if (state.stage === 'instrumented') {
+  if (state.stage === 'restartRequired') {
     return h(
       'div',
-      { className: 'dbk-grid' },
-      h(
-        'div',
-        { className: 'dbk-card' },
-        h('h3', { className: 'dbk-card-title' }, '埋点已经完成'),
-        h('p', null, '按照 DSH 给出的方式启动或重启项目。确认日志文件开始产生内容后，点击“开始复现”。'),
-      ),
-      summaryCard(h, state),
+      { className: 'dbk-card' },
+      h('h3', { className: 'dbk-card-title' }, '已完成日志埋点，请重启项目'),
+      h('p', null, '如果项目已经重启或本次无需重启，请点击“已重启”。'),
     )
   }
 
@@ -563,9 +575,7 @@ function renderFooter(
     startTracking(): Promise<void>
     startReproduction(): Promise<void>
     finishReproduction(): Promise<void>
-    cancelCapture(): Promise<void>
     reset(): Promise<void>
-    edit(): void
     close(): void
   },
 ): React.ReactNode {
@@ -583,16 +593,20 @@ function renderFooter(
 
   let right: React.ReactElement[]
   if (stage === 'setup') {
-    right = [button('取消', actions.close), button(busy ? '正在准备…' : '开始追踪', () => { void actions.startTracking() }, 'primary')]
+    right = [button('取消', actions.close, '', false), button(busy ? '正在准备…' : '开始追踪', () => { void actions.startTracking() }, 'primary')]
   } else if (stage === 'instrumenting') {
     right = [button('关闭', actions.close)]
-  } else if (stage === 'instrumented') {
-    right = [button('修改问题', actions.edit), button(busy ? '正在检查日志…' : '开始复现', () => { void actions.startReproduction() }, 'primary')]
-  } else if (stage === 'capturing') {
+  } else if (stage === 'restartRequired') {
+    right = [button('取消', actions.close, '', false), button('已重启', () => { void actions.startReproduction() }, 'primary')]
+  } else if (stage === 'checkingLog') {
+    right = [button('取消', actions.close, '', false), button('正在检查日志…', () => {}, 'primary', true)]
+  } else if (stage === 'capturing' || stage === 'noIssue') {
     right = [
-      button('取消追踪', () => { void actions.cancelCapture() }, 'danger'),
-      button(busy ? '正在抓取…' : '已复现', () => { void actions.finishReproduction() }, 'primary'),
+      button('取消', actions.close, '', false),
+      button('已复现', () => { void actions.finishReproduction() }, 'primary'),
     ]
+  } else if (stage === 'settlingLogs') {
+    right = [button('取消', actions.close, '', false), button('正在等待日志…', () => {}, 'primary', true)]
   } else if (stage === 'fixing') {
     right = [button('关闭', actions.close)]
   } else if (stage === 'failed') {
@@ -669,11 +683,12 @@ function composerIsEmpty(props: BugKillerButtonProps): boolean {
 }
 
 function labelFor(stage: Stage): string {
+  if (stage === 'setup') return '未开始'
   if (stage === 'instrumenting') return '埋点中'
-  if (stage === 'instrumented') return '待复现'
-  if (stage === 'capturing') return '追踪中'
-  if (stage === 'fixing') return '修复中'
-  if (stage === 'complete') return '已完成'
+  if (stage === 'restartRequired') return '待重启'
+  if (stage === 'checkingLog' || stage === 'settlingLogs') return '检查日志'
+  if (stage === 'capturing' || stage === 'noIssue') return '未发现问题'
+  if (stage === 'fixing' || stage === 'complete') return '已定位问题'
   if (stage === 'failed') return '执行异常'
   return ''
 }
@@ -722,8 +737,11 @@ function isStoredState(value: unknown): value is StoredState {
     && typeof candidate.traceId === 'string'
     && (candidate.stage === 'setup'
       || candidate.stage === 'instrumenting'
-      || candidate.stage === 'instrumented'
+      || candidate.stage === 'restartRequired'
+      || candidate.stage === 'checkingLog'
       || candidate.stage === 'capturing'
+      || candidate.stage === 'settlingLogs'
+      || candidate.stage === 'noIssue'
       || candidate.stage === 'fixing'
       || candidate.stage === 'complete'
       || candidate.stage === 'failed')
@@ -731,6 +749,7 @@ function isStoredState(value: unknown): value is StoredState {
       || candidate.failedTask === 'instrumentation'
       || candidate.failedTask === 'diagnosis')
     && (candidate.startedAt === undefined || typeof candidate.startedAt === 'number')
+    && (candidate.captureStartOffset === undefined || typeof candidate.captureStartOffset === 'number')
 }
 
 function messageOf(reason: unknown): string {
@@ -741,4 +760,59 @@ function messageOf(reason: unknown): string {
 function submitPrompt(props: BugKillerButtonProps, prompt: string): void {
   props.inputActions.setDraft(prompt)
   queueMicrotask(() => props.inputActions.submit())
+}
+
+async function probeLog(
+  connection: ClientConnectionLike,
+  rootCwd: string,
+  projectCwd: string,
+  logPath: string,
+): Promise<LogProbeResult> {
+  return callRpc<LogProbeResult>(connection, RPC_ENDPOINTS.probe, {
+    rootCwd,
+    cwd: projectCwd,
+    logPath,
+  })
+}
+
+async function waitForStableLog(probe: () => Promise<LogProbeResult>): Promise<void> {
+  let previous: LogProbeResult | undefined
+  let stableChecks = 0
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const current = await probe()
+    stableChecks = current.exists && previous?.exists && sameLogVersion(current, previous)
+      ? stableChecks + 1
+      : 0
+    if (stableChecks >= 2) return
+    previous = current
+    await waitForNextPoll()
+  }
+  throw new Error('暂未检测到稳定的日志文件。请确认项目已经启动并正在写入日志，然后再次点击“已重启”。')
+}
+
+async function waitForReproductionLog(
+  probe: () => Promise<LogProbeResult>,
+  startOffset: number,
+): Promise<void> {
+  let previous: LogProbeResult | undefined
+  let changed = false
+  let stableChecks = 0
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const current = await probe()
+    if (current.exists && current.size !== startOffset) changed = true
+    stableChecks = changed && current.exists && previous?.exists && sameLogVersion(current, previous)
+      ? stableChecks + 1
+      : 0
+    if (stableChecks >= 2) return
+    previous = current
+    await waitForNextPoll()
+  }
+}
+
+function sameLogVersion(left: LogProbeResult, right: LogProbeResult): boolean {
+  return left.size === right.size && left.modifiedAt === right.modifiedAt
+}
+
+function waitForNextPoll(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 750))
 }

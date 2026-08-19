@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RPC_ENDPOINTS } from '../src/contracts.ts'
@@ -44,6 +44,25 @@ describe('host RPC boundary', () => {
       expect(result).toMatchObject({
         ok: true,
         value: { directories: [{ name: 'server' }] },
+      })
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('probes a log through the selected project boundary', async () => {
+    const workspace = await mkdtemp(path.join(process.cwd(), '.tmp-bug-killer-probe-rpc-'))
+    try {
+      await mkdir(path.join(workspace, 'logs'))
+      await writeFile(path.join(workspace, 'logs', 'app.log'), 'started\n', 'utf8')
+      const result = await handler(RPC_ENDPOINTS.probe, {
+        rootCwd: workspace,
+        cwd: workspace,
+        logPath: 'logs/app.log',
+      }, new AbortController().signal)
+      expect(result).toMatchObject({
+        ok: true,
+        value: { exists: true, relativePath: 'logs/app.log', size: 8 },
       })
     } finally {
       await rm(workspace, { recursive: true, force: true })

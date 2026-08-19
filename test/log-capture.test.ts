@@ -110,6 +110,23 @@ describe('LogCaptureManager', () => {
     expect(names).not.toContain('node_modules/fake/ignored.log')
   })
 
+  it('probes whether the selected log exists and reports its current size', async () => {
+    const missing = await createManager().probeLog(workspace, 'logs/application.log')
+    expect(missing).toEqual({
+      exists: false,
+      relativePath: 'logs/application.log',
+      size: 0,
+      modifiedAt: 0,
+    })
+
+    await writeFile(path.join(workspace, 'logs', 'application.log'), 'ready\n', 'utf8')
+    const ready = await createManager().probeLog(workspace, 'logs/application.log')
+    expect(ready.exists).toBe(true)
+    expect(ready.relativePath).toBe('logs/application.log')
+    expect(ready.size).toBe(6)
+    expect(ready.modifiedAt).toBeGreaterThan(0)
+  })
+
   it('rejects an absolute log path outside the DSH workspace', async () => {
     const outside = path.join(process.cwd(), `.tmp-bug-killer-outside-${Date.now()}.log`)
     await writeFile(outside, 'outside\n', 'utf8')

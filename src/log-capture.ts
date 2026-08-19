@@ -5,6 +5,7 @@ import type {
   CaptureStartResult,
   CaptureStatusResult,
   DiscoveredLog,
+  LogProbeResult,
 } from './contracts.ts'
 import {
   BugKillerError,
@@ -71,6 +72,30 @@ export class LogCaptureManager {
     return found
       .sort((left, right) => right.modifiedAt - left.modifiedAt)
       .slice(0, DISCOVERY_LIMIT)
+  }
+
+  async probeLog(cwdInput: unknown, logPathInput: unknown): Promise<LogProbeResult> {
+    const requestedPath = requireNonEmptyString(logPathInput, 'logPath', 4096)
+    try {
+      const resolved = await resolveWorkspaceFile(cwdInput, requestedPath)
+      const fileStat = await stat(resolved.filePath)
+      if (!fileStat.isFile()) throw new BugKillerError('log-not-file', '日志路径不是普通文件。')
+      assertSafeFileSize(fileStat.size)
+      return {
+        exists: true,
+        relativePath: resolved.relativePath,
+        size: fileStat.size,
+        modifiedAt: fileStat.mtimeMs,
+      }
+    } catch (error) {
+      if (error instanceof BugKillerError && error.code === 'log-not-found') {
+        return { exists: false, relativePath: normalizeRelativePath(requestedPath), size: 0, modifiedAt: 0 }
+      }
+      if (isMissingFileError(error)) {
+        return { exists: false, relativePath: normalizeRelativePath(requestedPath), size: 0, modifiedAt: 0 }
+      }
+      throw error
+    }
   }
 
   async start(sessionInput: unknown, cwdInput: unknown, logPathInput: unknown): Promise<CaptureStartResult> {
@@ -269,6 +294,10 @@ function assertSafeFileSize(size: number): void {
   if (!Number.isSafeInteger(size) || size < 0) {
     throw new BugKillerError('log-too-large', '日志文件大小超出当前运行时可安全处理的范围。')
   }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
 }
 
 function clampInteger(value: number, minimum: number, maximum: number, fallback: number): number {
