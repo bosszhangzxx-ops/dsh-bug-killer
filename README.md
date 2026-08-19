@@ -1,50 +1,116 @@
-# dsh-bug-killer
+<p align="center">
+  <img src="docs/assets/hero.svg" alt="dsh-bug-killer — turn reproduction logs into repair evidence" width="100%" />
+</p>
 
-> Bugs lie. Logs don't. You reproduce it; Bug Killer brings the evidence back to DSH.
+<p align="center">
+  <a href="https://github.com/bosszhangzxx-ops/dsh-bug-killer/actions/workflows/ci.yml"><img src="https://github.com/bosszhangzxx-ops/dsh-bug-killer/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white" alt="TypeScript strict" />
+  <img src="https://img.shields.io/badge/DSH-Web_Plugin-4d6bfe" alt="DeepSeek Harness Web plugin" />
+  <img src="https://img.shields.io/badge/capture-workspace--scoped-20a66a" alt="Workspace-scoped capture" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+</p>
 
-`dsh-bug-killer` is a local debugging plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. It turns a repetitive workflow—instrument, restart, reproduce, copy logs, prompt the agent—into one guided flow next to the composer.
+<p align="center">
+  <strong>Bugs lie. Logs don't.</strong><br />
+  A guided, evidence-driven debugging loop for the <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> Web UI.
+</p>
 
-English | [简体中文](README.zh.md)
+<p align="center">English · <a href="README.zh.md">简体中文</a></p>
 
-## Workflow
+## What is Bug Killer?
 
-1. Click **Bug Killer** next to the DSH send button.
-2. Describe the issue and confirm the echoed project folder. If the DSH workspace contains multiple projects, choose one of its subdirectories.
-3. Click **Start tracing**. This click authorizes Bug Killer to send the instrumentation task to DSH automatically.
-4. DSH identifies the project type and logging setup, traces the relevant method chain, and answers with only a short restart instruction.
-5. When DSH finishes, Bug Killer opens automatically. Restart the application and click **Restarted**.
-6. The plugin waits until the log file is stable, records its byte offset, and asks you to reproduce the issue.
-7. Click **Reproduced**. Bug Killer waits for pending log writes to settle, reads only bytes written after the offset, and automatically sends a guarded diagnosis task to DSH.
-8. When DSH finishes its repair attempt, Bug Killer switches to a yellow **Pending confirmation** state without interrupting the user.
-9. Open Bug Killer to choose **Not solved** or **Solved, and remove instrumentation logs**.
-10. Click **Not solved** to keep the instrumentation and repeat the restart/reproduction loop, or **Solved, and remove instrumentation logs** to let DSH remove this trace's temporary instrumentation and reset Bug Killer.
+`dsh-bug-killer` turns a repetitive debugging routine into one guided flow beside the DSH composer:
 
-Bug Killer itself does not edit application code. It submits explicit DSH tasks after **Start tracing**, **Reproduced**, and—only after confirmation—**Solved, and remove instrumentation logs**; DSH performs and reports the code changes.
+> ask the agent to add logs → restart the app → reproduce the issue → copy the new logs → explain everything again → ask for a fix
 
-## Highlights
+The plugin asks DSH to instrument the relevant business path, records the log-file offset before reproduction, captures only the bytes appended while the bug is reproduced, and sends that bounded evidence back for diagnosis. After the repair, the user decides whether to continue tracing or remove the temporary instrumentation.
 
-- Native DSH Web composer button with automatic task-completion tracking.
-- A workspace-bounded project-folder picker for multi-project working directories.
-- Technology-neutral project and logging discovery before instrumentation.
-- Guided restart/reproduction dialogs that open when the DSH task settles.
-- A non-intrusive yellow **Pending confirmation** state; open Bug Killer to confirm the result, while unsuccessful attempts retain instrumentation for another evidence cycle.
-- Log-file polling before capture and after reproduction to avoid racing buffered writes.
-- Workspace-scoped `.log` discovery.
-- Byte-offset incremental capture with truncation/rotation recovery.
-- Head-and-tail retention when a capture exceeds its size budget.
-- Redaction for common authorization headers, cookies, tokens, API keys, and passwords.
-- Explicit untrusted-evidence framing to reduce log-based prompt injection risk.
-- Canonical-path containment that rejects traversal, symlink escapes, and files outside the workspace.
-- Loopback-only browser-to-host RPC; no cloud service, telemetry, or log upload.
-- Strict TypeScript, real-file integration tests, build smoke tests, and CI.
+It is designed for the awkward bugs that often throw no exception: the API returns success, but a status stays stale; the wrong branch runs; a write reports success but the business state is still wrong.
 
-## Requirements
+## Quick start
 
-- Node.js `22.19+` or `24+`
-- DeepSeek Harness `0.1.0-rc.7` or a compatible release
-- A local application whose file log can be placed inside the selected project folder
+```bash
+dsh plugin --profile web add github:bosszhangzxx-ops/dsh-bug-killer#main
+dsh web
+```
 
-Bug Killer reads files rather than IDE or terminal consoles. If the application currently logs only to a console, the instrumentation task asks DSH to add a local-only file logger. For Spring Boot, that may look like:
+The repository ships prebuilt `lib/` artifacts. Users do not need to clone the source or build the plugin themselves. If DSH Web is already running, restart it after installation.
+
+## The debugging loop
+
+```mermaid
+flowchart LR
+    A[Describe the issue] --> B[DSH instruments the path]
+    B --> C[Restart and reproduce]
+    C --> D[Capture appended logs]
+    D --> E[DSH diagnoses and repairs]
+    E --> F{Solved?}
+    F -- Not yet --> C
+    F -- Yes --> G[Remove temporary instrumentation]
+```
+
+1. Open **Bug Killer**, describe the issue, and confirm the project folder.
+2. DSH inspects the project type and logging setup, then adds trace-tagged logs only along the relevant method chain.
+3. Restart the application. Bug Killer waits for the log file to settle and records its byte offset.
+4. Reproduce the issue. The plugin reads only the new log range and redacts common secrets.
+5. DSH receives the issue plus guarded log evidence, diagnoses the cause, changes the code, and runs checks.
+6. Bug Killer enters a yellow **Pending confirmation** state. Choose **Not solved** to repeat the evidence loop, or **Solved, and remove instrumentation logs** to clean up the trace.
+
+Bug Killer orchestrates the workflow; DSH performs and reports the application-code changes.
+
+## Why it stands out
+
+| Native workflow | Precise evidence | Local safety boundary |
+| --- | --- | --- |
+| Lives next to the DSH composer and tracks task completion | Captures from a byte offset instead of copying the entire log | Canonical-path checks keep project and log access inside the active workspace |
+| Handles restart, reproduction, repair confirmation, and cleanup as explicit states | Detects truncation or rotation and preserves useful head/tail evidence under a size limit | Redacts common credentials and frames every log line as untrusted data |
+| Supports child-project selection for multi-project workspaces | Polls before and after reproduction so buffered writes are less likely to race capture | Browser-to-host RPC is loopback-only; the plugin adds no separate telemetry or upload endpoint |
+
+## Engineering design
+
+The project deliberately separates browser interaction from filesystem authority:
+
+| Layer | Responsibility |
+| --- | --- |
+| `src/client/` | DSH Web button, dialog state machine, project picker, and guided user actions |
+| `src/index.ts` | Loopback RPC registration and validated host endpoints |
+| `src/project-directory.ts` | Workspace-bounded project selection with canonical-path containment |
+| `src/log-capture.ts` | Discovery, offset capture, rotation recovery, and bounded reads |
+| `src/security.ts` | Input validation, path safety, control-character filtering, and secret redaction |
+| `src/prompts.ts` | Technology-neutral instrumentation, diagnosis, and cleanup contracts for DSH |
+
+### Evidence, not log dumping
+
+- Records the current file size before reproduction and reads from that offset afterward.
+- Detects a replaced, truncated, or rotated file using device, inode, birth time, and size.
+- Keeps the beginning and end when the appended range exceeds the configured budget.
+- Leaves an empty capture active so the user can reproduce again instead of losing the trace.
+- Polls for file stability before capture starts and before the evidence is finalized.
+
+### Safety by design
+
+- Resolves workspace, project, and log paths through `realpath`.
+- Rejects `..` traversal, symbolic-link escapes, non-regular files, and paths outside the workspace.
+- Redacts common authorization headers, cookies, passwords, API keys, and tokens.
+- Escapes captured text and wraps it in an explicit untrusted-evidence boundary.
+- Keeps temporary instrumentation until the user confirms the repair.
+- Removes only statements carrying the current Bug Killer trace ID.
+
+> [!IMPORTANT]
+> Capture and path access happen locally inside the selected workspace. After reproduction, the selected evidence is intentionally inserted into a DSH prompt and processed by the model provider configured in DSH. Bug Killer is not an offline log analyzer.
+
+See the full [security model](SECURITY.md).
+
+## Requirements and limitations
+
+- Node.js `22.19+` or `24+`.
+- DeepSeek Harness `0.1.0-rc.7` or a compatible release.
+- A local application that can write a regular `.log` file inside the selected project folder.
+
+Bug Killer reads files, not IntelliJ IDEA or terminal console buffers. If an application logs only to the console, the instrumentation task asks DSH to add a minimal local-only file logger. It does not attach to production hosts, Docker, Kubernetes, or remote logging platforms.
+
+<details>
+<summary>Spring Boot local logging example</summary>
 
 ```yaml
 logging:
@@ -52,14 +118,16 @@ logging:
     name: logs/application.log
 ```
 
-## Install
+Keep this configuration in a local development profile.
+</details>
+
+## Installation options
+
+Install the latest `main` branch:
 
 ```bash
 dsh plugin --profile web add github:bosszhangzxx-ops/dsh-bug-killer#main
-dsh web
 ```
-
-The repository includes prebuilt `lib/` artifacts, so a GitHub install does not build the plugin on the user's machine. Restart `dsh web` after installation.
 
 Pin a release or commit for reproducible installs:
 
@@ -67,7 +135,17 @@ Pin a release or commit for reproducible installs:
 dsh plugin --profile web add github:bosszhangzxx-ops/dsh-bug-killer#<tag-or-commit>
 ```
 
-## Local development
+Restart `dsh web` after installing or updating the plugin.
+
+## Configuration
+
+| Field | Default | Purpose |
+| --- | ---: | --- |
+| `maxCaptureBytes` | `1048576` | Maximum appended log bytes retained per capture; allowed range is 64 KiB–10 MiB |
+| `maxDiscoveryDepth` | `4` | Maximum directory depth for automatic `.log` discovery; allowed range is 1–8 |
+| `redactSecrets` | `true` | Redact common secret formats before evidence reaches the browser |
+
+## Development and verification
 
 ```bash
 pnpm install
@@ -76,30 +154,11 @@ pnpm exec dsh plugin --profile web add .
 pnpm exec dsh --profile web --dump-config
 ```
 
-Run `pnpm exec dsh web` when you want to open the Web UI.
+`pnpm check` runs strict type checking, the Vitest suite, the production build, and a package smoke test. The suite exercises the browser flow, real-file incremental capture, empty retries, truncation and replacement, bounded reads, project containment, RPC validation, secret redaction, and prompt framing. GitHub Actions runs the same gate on pushes and pull requests.
 
-## Configuration
+## Contributing
 
-| Field | Default | Purpose |
-| --- | ---: | --- |
-| `maxCaptureBytes` | `1048576` | Maximum new log bytes retained per capture (64 KiB–10 MiB) |
-| `maxDiscoveryDepth` | `4` | Maximum directory depth for automatic log discovery (1–8) |
-| `redactSecrets` | `true` | Redact common secrets before evidence reaches the browser |
-
-## Verification
-
-```bash
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm smoke
-```
-
-The tests append real Spring-style log lines to real files and cover incremental reads, empty retries, truncation/rotation, bounded captures, discovery, path containment, redaction, prompt framing, and the host RPC boundary.
-
-## Security
-
-See [SECURITY.md](SECURITY.md).
+Issues and focused pull requests are welcome. Never attach real credentials, private application logs, or proprietary source code to a public issue. Security-sensitive reports should follow [SECURITY.md](SECURITY.md).
 
 ## License
 

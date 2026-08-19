@@ -20,6 +20,7 @@
     "lib/client.js",
     "lib/client.js.map",
     "cordis.patch.yml",
+    "docs/assets/hero.svg",
     "README.md",
     "README.zh.md",
     "SECURITY.md",

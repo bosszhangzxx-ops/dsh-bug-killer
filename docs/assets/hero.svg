@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">dsh-bug-killer</title>
+  <desc id="desc">A workspace-scoped DeepSeek Harness plugin that turns reproduction logs into repair evidence.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#080b14"/>
+      <stop offset="0.55" stop-color="#10172b"/>
+      <stop offset="1" stop-color="#0a1020"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.78" cy="0.42" r="0.55">
+      <stop offset="0" stop-color="#4d6bfe" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#4d6bfe" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4d6bfe"/>
+      <stop offset="1" stop-color="#77a7ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000" flood-opacity="0.36"/>
+    </filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#9cb1ff" stroke-opacity="0.055"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="420" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="420" rx="28" fill="url(#glow)"/>
+  <rect x="1" y="1" width="1198" height="418" rx="27" fill="none" stroke="#7891ff" stroke-opacity="0.2"/>
+  <rect width="1200" height="420" rx="28" fill="url(#grid)"/>
+  <g transform="translate(72 70)">
+    <rect width="250" height="30" rx="15" fill="#4d6bfe" fill-opacity="0.14" stroke="#6f86ff" stroke-opacity="0.4"/>
+    <circle cx="18" cy="15" r="4" fill="#78a0ff"/>
+    <text x="32" y="20" fill="#b9c6ff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="1.4">WORKSPACE-SCOPED DSH PLUGIN</text>
+    <text x="0" y="94" fill="#f7f9ff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="54" font-weight="750" letter-spacing="-1.5">dsh-bug-killer</text>
+    <text x="0" y="136" fill="#aeb8d5" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20">Turn reproduction logs into repair evidence.</text>
+    <text x="0" y="169" fill="#7f8aa8" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15">Instrument the path · capture only the new logs · hand the evidence back to DSH</text>
+    <g transform="translate(0 216)" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="0.8">
+      <g><rect width="98" height="38" rx="10" fill="#161f3b" stroke="#4d6bfe" stroke-opacity="0.55"/><text x="49" y="24" text-anchor="middle" fill="#dbe2ff">TRACE</text></g>
+      <path d="M106 19h22" stroke="#56627f" stroke-width="2"/><path d="m124 14 6 5-6 5" fill="none" stroke="#56627f" stroke-width="2"/>
+      <g transform="translate(138)"><rect width="124" height="38" rx="10" fill="#161f3b" stroke="#4d6bfe" stroke-opacity="0.55"/><text x="62" y="24" text-anchor="middle" fill="#dbe2ff">REPRODUCE</text></g>
+      <path d="M270 19h22" stroke="#56627f" stroke-width="2"/><path d="m288 14 6 5-6 5" fill="none" stroke="#56627f" stroke-width="2"/>
+      <g transform="translate(302)"><rect width="112" height="38" rx="10" fill="#161f3b" stroke="#4d6bfe" stroke-opacity="0.55"/><text x="56" y="24" text-anchor="middle" fill="#dbe2ff">CAPTURE</text></g>
+      <path d="M422 19h22" stroke="#56627f" stroke-width="2"/><path d="m440 14 6 5-6 5" fill="none" stroke="#56627f" stroke-width="2"/>
+      <g transform="translate(454)"><rect width="82" height="38" rx="10" fill="#4d6bfe"/><text x="41" y="24" text-anchor="middle" fill="#fff">FIX</text></g>
+    </g>
+  </g>
+  <g transform="translate(752 54)" filter="url(#shadow)">
+    <rect width="378" height="312" rx="22" fill="#11182b" stroke="#6b7cbd" stroke-opacity="0.35"/>
+    <rect x="1" y="1" width="376" height="48" rx="21" fill="#18213a"/>
+    <path d="M1 49h376" stroke="#7180b5" stroke-opacity="0.22"/>
+    <circle cx="24" cy="25" r="5" fill="#ff6b6b"/><circle cx="42" cy="25" r="5" fill="#f5a623"/><circle cx="60" cy="25" r="5" fill="#52d273"/>
+    <text x="86" y="30" fill="#9ba8cb" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="12">trace BK-7F3A</text>
+    <g transform="translate(28 78)" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="12">
+      <rect width="322" height="42" rx="9" fill="#151e34"/><circle cx="18" cy="21" r="5" fill="#4d6bfe"/>
+      <text x="34" y="18" fill="#c8d1ed">controller.approve</text><text x="34" y="32" fill="#68779d">studentId=42 · status=PENDING</text>
+      <path d="M18 43v20" stroke="url(#line)" stroke-width="2"/>
+      <rect y="62" width="322" height="42" rx="9" fill="#151e34"/><circle cx="18" cy="83" r="5" fill="#5c7bff"/>
+      <text x="34" y="80" fill="#c8d1ed">service.updateStatus</text><text x="34" y="94" fill="#68779d">expected=APPROVED · actual=PENDING</text>
+      <path d="M18 105v20" stroke="url(#line)" stroke-width="2"/>
+      <rect y="124" width="322" height="42" rx="9" fill="#151e34"/><circle cx="18" cy="145" r="5" fill="#6b8cff"/>
+      <text x="34" y="142" fill="#c8d1ed">repository.save</text><text x="34" y="156" fill="#68779d">rows=1 · persisted=false</text>
+      <path d="M18 167v20" stroke="url(#line)" stroke-width="2"/>
+      <rect y="186" width="322" height="42" rx="9" fill="#172642" stroke="#4d6bfe" stroke-opacity="0.55"/><circle cx="18" cy="207" r="6" fill="#4d6bfe"/>
+      <path d="m15 207 2 2 4-5" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="34" y="204" fill="#e4e9ff">evidence ready</text><text x="34" y="218" fill="#8ca5ff">captured only after reproduction</text>
+    </g>
+  </g>
+</svg>

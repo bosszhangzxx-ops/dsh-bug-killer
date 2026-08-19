@@ -1,58 +1,116 @@
-# dsh-bug-killer
+<p align="center">
+  <img src="docs/assets/hero.svg" alt="dsh-bug-killer：把复现日志变成可用于修复的证据" width="100%" />
+</p>
 
-> Bug 会撒谎，日志不会。你负责复现，我负责把证据递给 DSH。
+<p align="center">
+  <a href="https://github.com/bosszhangzxx-ops/dsh-bug-killer/actions/workflows/ci.yml"><img src="https://github.com/bosszhangzxx-ops/dsh-bug-killer/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white" alt="TypeScript 严格模式" />
+  <img src="https://img.shields.io/badge/DSH-Web_Plugin-4d6bfe" alt="DeepSeek Harness Web 插件" />
+  <img src="https://img.shields.io/badge/capture-workspace--scoped-20a66a" alt="采集范围限制在工作区" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+</p>
 
-`dsh-bug-killer` 是一个面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI 的本地调试插件。它把“让 Agent 加临时业务日志 → 用户复现 → 只抓复现期间的新日志 → 将证据放回输入框”的人工流程做成一个按钮。
+<p align="center">
+  <strong>Bug 会撒谎，日志不会。</strong><br />
+  为 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> Web UI 打造的证据驱动调试闭环。
+</p>
 
-[English](README.md) | 简体中文
+<p align="center"><a href="README.md">English</a> · 简体中文</p>
 
-## 它解决什么问题
+## Bug Killer 是什么？
 
-很多业务 Bug 不会抛异常：接口返回成功，但状态没有更新；某个分支走错；数据库写入值不符合预期。开发者通常需要反复加日志、重启、复现、复制日志，再让 AI 修改代码。
+`dsh-bug-killer` 把开发中反复出现的一套人工操作，收进 DSH 输入框旁边的一个按钮里：
 
-Bug Killer 把这个闭环缩短为：
+> 让 Agent 加日志 → 重启项目 → 手动复现 → 复制新增日志 → 重新解释上下文 → 再让 Agent 修复
 
-1. 在 DSH 输入框右侧点击 **Bug Killer**。
-2. 只填写问题描述，并确认回显的项目目录；如果当前工作目录下有多个项目，可点击“更改”选择其中一个子目录。
-3. 点击 **开始追踪**。这次点击即代表授权插件自动把埋点任务发送给 DSH。
-4. DSH 先识别项目类型、启动方式和日志配置，再定位完整相关方法链并添加临时埋点，最终只给出简短的重启提示。
-5. DSH 回答结束后，Bug Killer 自动弹窗。重启项目并点击 **已重启**。
-6. 插件轮询到日志文件稳定后记录字节起点，并提示你复现刚才的问题。
-7. 返回 DSH 点击 **已复现**。插件等待尚未落盘的日志稳定，只读取起点之后的内容，再自动发送带安全约束的修复任务。
-8. DSH 完成本轮修复尝试后，Bug Killer 只显示黄色“待确认”状态，不主动弹出确认界面。
-9. 用户主动打开 Bug Killer 后，可以选择 **未解决** 或 **已解决，并删除埋点日志**；未解决时保留埋点并重新进入重启—复现循环，已解决时自动清理本次临时埋点，清理完成后重置 Bug Killer。
+插件会让 DSH 沿着问题相关的业务链路添加临时埋点，在复现前记录日志文件的字节起点，只采集复现期间新增的日志，再把经过限制和安全处理的证据交回 DSH。修复结束后，由用户决定继续追踪，还是清理本次临时埋点。
 
-插件本身不直接修改业务代码；用户点击“开始追踪”“已复现”和最终确认“已解决，并删除埋点日志”后，它会分别提交埋点、修复和清理任务，由 DSH 执行代码改动。
+它主要解决那些“不报错但结果不对”的业务 Bug：接口返回成功，状态却没有更新；程序走了错误分支；数据库操作看似成功，最终业务状态仍然异常。
 
-## 能力
+## 快速开始
 
-- DSH Web 输入框右侧原生按钮，并跟踪埋点与修复任务是否完成。
-- 回显当前工作目录，支持在安全边界内选择子项目。
-- 埋点前自动识别语言、框架、项目类型、启动方式和日志配置，不限定 Java/Spring。
-- DSH 回答结束后自动弹出“已重启—已复现”的分步向导，取消只关闭弹窗。
-- 每次修复回答结束后，以黄色“待确认”状态提醒用户；用户主动打开 Bug Killer 后再确认是否解决，未解决时保留埋点继续循环。
-- 在开始采集和完成复现时轮询日志文件，避免读取尚未落盘的内容。
-- 自动发现当前工作区内最多四层目录中的 `.log` 文件。
-- 按字节偏移读取复现窗口，不重复搬运历史日志。
-- 检测日志截断或轮转，并从当前文件开头恢复读取。
-- 新增日志过大时保留开头和结尾，明确标注省略字节数。
-- 自动遮盖 Authorization、Bearer Token、Cookie、密码、API Key 等常见敏感数据。
-- 将日志标记为不可信证据，抵御日志中的提示词注入。
-- 日志路径经过 `realpath` 校验，拒绝 `../`、符号链接和工作区外文件。
-- 浏览器和宿主通过仅限本机的 RPC 通道通信，无云端服务、无遥测、无日志上传。
-- TypeScript 严格模式、单元测试、构建冒烟测试和 GitHub Actions CI。
+```bash
+dsh plugin --profile web add github:bosszhangzxx-ops/dsh-bug-killer#main
+dsh web
+```
 
-## 前置要求
+仓库已经包含构建好的 `lib/` 文件。普通用户无需克隆源码，也无需手动构建插件。如果 DSH Web 已经在运行，安装后需要重启。
 
-- Node.js `22.19+` 或 `24+`
-- DeepSeek Harness `0.1.0-rc.7` 或兼容版本
-- 本地项目能够把日志写入所选项目目录中的普通文件
+## 调试闭环
 
-> Bug Killer 不能直接读取 IntelliJ IDEA 或终端的运行控制台。若项目只有控制台输出，埋点任务会要求 DSH 增加仅用于本地追踪的文件日志配置。
+```mermaid
+flowchart LR
+    A[描述问题] --> B[DSH 沿业务链路添加埋点]
+    B --> C[重启并复现]
+    C --> D[只采集新增日志]
+    D --> E[DSH 定位并修复]
+    E --> F{问题解决了吗？}
+    F -- 未解决 --> C
+    F -- 已解决 --> G[清理临时埋点]
+```
 
-## Spring Boot 日志配置
+1. 打开 **Bug Killer**，填写问题描述并确认项目目录。
+2. DSH 识别项目类型和日志方式，只在相关方法链上添加带追踪标识的临时日志。
+3. 重启项目。Bug Killer 等待日志稳定，并记录当前字节起点。
+4. 在业务页面复现问题。插件只读取起点之后的新日志，并遮盖常见敏感信息。
+5. DSH 收到问题描述和受保护的日志证据，定位根因、修改代码并执行检查。
+6. Bug Killer 进入黄色“待确认”状态。选择“未解决”可继续复现；选择“已解决，并删除埋点日志”会清理本次临时埋点。
 
-`application-local.yml` 示例：
+Bug Killer 负责组织调试流程；真正的业务代码修改和检查由 DSH 执行并汇报。
+
+## 为什么它值得关注？
+
+| 原生工作流 | 精确采集证据 | 本地安全边界 |
+| --- | --- | --- |
+| 按钮直接位于 DSH 输入框旁，并跟踪任务是否结束 | 从复现前的字节偏移开始读取，不复制整份历史日志 | 使用规范路径校验，把项目和日志访问限制在当前工作区内 |
+| 将重启、复现、修复确认和清理拆成明确状态 | 识别日志截断或轮转，超限时保留有价值的首尾证据 | 自动遮盖常见凭证，并把每一行日志标记为不可信数据 |
+| 支持多项目工作目录下的子项目选择 | 复现前后轮询日志状态，降低缓冲写入造成的采集竞争 | 浏览器与宿主只通过本机 RPC 通信，插件不增加独立遥测或额外上传接口 |
+
+## 工程设计
+
+项目刻意把浏览器交互与文件系统权限分开：
+
+| 模块 | 职责 |
+| --- | --- |
+| `src/client/` | DSH Web 按钮、弹窗状态机、项目选择器和分步交互 |
+| `src/index.ts` | 注册仅限本机的 RPC，并校验宿主端请求 |
+| `src/project-directory.ts` | 在工作区安全边界内选择项目目录 |
+| `src/log-capture.ts` | 日志发现、偏移采集、轮转恢复和限额读取 |
+| `src/security.ts` | 输入校验、路径安全、控制字符过滤和敏感信息脱敏 |
+| `src/prompts.ts` | 提供与技术栈无关的埋点、诊断和清理任务约束 |
+
+### 采集证据，不是倾倒日志
+
+- 复现前记录文件大小，复现后只读取该偏移之后的内容。
+- 结合设备号、inode、创建时间和文件大小识别替换、截断与轮转。
+- 新增日志超过上限时保留开头和结尾，并标明省略字节数。
+- 没有采集到新增日志时保留当前追踪，让用户可以再次复现。
+- 开始采集和完成复现时轮询文件状态，等待缓冲日志写入稳定。
+
+### 安全不是事后补丁
+
+- 工作区、项目和日志路径全部经过 `realpath` 规范化。
+- 拒绝 `..` 路径穿越、符号链接逃逸、非普通文件和工作区外路径。
+- 遮盖常见 Authorization、Cookie、密码、API Key 和 Token。
+- 对日志内容进行转义，并放入明确的“不可信证据”边界。
+- 用户确认修复前一直保留临时埋点，避免修复尚未验证就丢失证据。
+- 清理时只删除带有本次 Bug Killer 追踪标识的日志语句。
+
+> [!IMPORTANT]
+> 日志采集和路径访问发生在本机所选工作区内；完成复现后，选中的日志证据会被放入 DSH 提示词，并由 DSH 中配置的模型提供方处理。Bug Killer 不是完全离线的日志分析器。
+
+完整边界参见 [安全模型](SECURITY.md)。
+
+## 使用条件与限制
+
+- Node.js `22.19+` 或 `24+`。
+- DeepSeek Harness `0.1.0-rc.7` 或兼容版本。
+- 本地项目能够将日志写入所选项目目录内的普通 `.log` 文件。
+
+Bug Killer 读取日志文件，不能直接读取 IntelliJ IDEA 或终端的控制台缓冲区。若项目只有控制台输出，埋点任务会要求 DSH 添加最小化、仅本地启用的文件日志配置。它不会连接生产服务器、Docker、Kubernetes 或远程日志平台。
+
+<details>
+<summary>Spring Boot 本地日志示例</summary>
 
 ```yaml
 logging:
@@ -60,30 +118,34 @@ logging:
     name: logs/application.log
 ```
 
-`application-local.properties` 示例：
+建议只在本地开发环境配置中启用。
+</details>
 
-```properties
-logging.file.name=logs/application.log
-```
+## 安装方式
 
-建议只在本地开发环境启用。使用 Logback 自定义配置的项目，只要最终写入工作区内的普通文件即可。
-
-## 安装
+安装最新的 `main` 分支：
 
 ```bash
 dsh plugin --profile web add github:bosszhangzxx-ops/dsh-bug-killer#main
-dsh web
 ```
 
-仓库已经提交构建好的 `lib/` 产物，从 GitHub 安装时不会在用户电脑上重新构建插件。安装完成后重启 `dsh web`。
-
-需要固定版本时，可以指定 Release 标签或提交：
+需要稳定复现安装结果时，可以固定 Release 或提交：
 
 ```bash
 dsh plugin --profile web add github:bosszhangzxx-ops/dsh-bug-killer#<tag-or-commit>
 ```
 
-### 本地开发安装
+安装或更新插件后，请重启 `dsh web`。
+
+## 配置
+
+| 字段 | 默认值 | 说明 |
+| --- | ---: | --- |
+| `maxCaptureBytes` | `1048576` | 单次最多保留的新增日志字节数，允许范围为 64 KiB–10 MiB |
+| `maxDiscoveryDepth` | `4` | 自动发现 `.log` 文件的最大目录深度，允许范围为 1–8 |
+| `redactSecrets` | `true` | 日志证据进入浏览器前遮盖常见敏感信息 |
+
+## 开发与验证
 
 ```bash
 pnpm install
@@ -92,45 +154,11 @@ pnpm exec dsh plugin --profile web add .
 pnpm exec dsh --profile web --dump-config
 ```
 
-看到 `dsh-bug-killer` 配置层后，使用 `pnpm exec dsh web` 启动 Web UI。
+`pnpm check` 会依次执行 TypeScript 严格类型检查、Vitest 测试、生产构建和包冒烟检查。测试覆盖浏览器完整流程、真实文件增量读取、空日志重试、日志截断和替换、限额读取、项目路径隔离、RPC 校验、敏感信息脱敏和提示词边界。GitHub Actions 会在推送和 Pull Request 时执行同一套质量门禁。
 
-## 使用注意
+## 参与贡献
 
-- 埋点完成后应先重启项目，再点击“已重启”；插件会在日志文件稳定后自动记录起点。
-- 日志文件必须已经存在；不存在时插件会明确报错，不会悄悄退化成读取整个目录。
-- 单次默认最多携带 1 MiB 日志。超出部分保留首尾，避免撑爆 Agent 上下文。
-- “已复现”时若没有新增字节，追踪状态会保留，你可以继续复现后再次尝试。
-- 问题表单保存在浏览器当前站点的 `localStorage`，日志正文不会存入浏览器存储。
-- DSH 目前仍处于开发者预览阶段，未来破坏性更新可能需要本插件同步适配。
-
-## 配置
-
-安装层 `cordis.patch.yml` 提供以下宿主配置：
-
-| 字段 | 默认值 | 说明 |
-| --- | ---: | --- |
-| `maxCaptureBytes` | `1048576` | 单次最多读取的新日志字节数，限制在 64 KiB 到 10 MiB |
-| `maxDiscoveryDepth` | `4` | 自动发现日志的最大目录深度，限制在 1 到 8 |
-| `redactSecrets` | `true` | 返回浏览器前遮盖常见敏感字段 |
-
-## 开发与验证
-
-```bash
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm smoke
-```
-
-`pnpm check` 会按以上顺序执行全部检查。测试使用真实文件追加验证增量采集，同时覆盖空日志重试、文件截断、超限首尾保留、日志发现、路径越界和敏感信息遮盖。
-
-## 简历表述参考
-
-> 独立开发 DeepSeek Harness 调试插件 dsh-bug-killer，基于 Web UI Slot 与本机 RPC 打通浏览器交互和宿主文件能力；实现技术栈识别、完整业务链路埋点、字节偏移日志采集、轮转检测、敏感信息脱敏和工作区路径隔离，形成“埋点—复现—证据—Agent 修复—用户验收—自动清理”的反馈闭环，并补齐严格类型检查、自动化测试与 CI。
-
-## 安全
-
-参见 [SECURITY.md](SECURITY.md)。
+欢迎提交问题和范围明确的 Pull Request。请勿在公开 Issue 中附带真实凭证、私有业务日志或公司源代码；安全敏感问题请按照 [SECURITY.md](SECURITY.md) 说明处理。
 
 ## License
 
