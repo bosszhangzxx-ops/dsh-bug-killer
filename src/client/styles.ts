@@ -24,27 +24,6 @@ export function injectStyles(): void {
   font-size: 12px;
   cursor: pointer;
 }
-.dbk-trigger-shell { position: relative; display: inline-flex; align-items: center; }
-.dbk-result-drawer {
-  box-sizing: border-box;
-  position: absolute;
-  z-index: 1001;
-  top: calc(100% + 8px);
-  right: 0;
-  width: 260px;
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.28));
-  border-radius: 11px;
-  background: var(--dsw-alias-bg-layer-3, #fff);
-  color: var(--dsw-alias-label-primary, #171717);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, .22);
-}
-.dbk-result-question { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.5; }
-.dbk-result-error { margin: 0; color: var(--dsw-alias-state-error-primary, #b22); font-size: 11px; line-height: 1.5; }
-.dbk-result-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.dbk-result-actions .dbk-button { min-height: 32px; padding: 5px 12px; }
 .dbk-trigger:hover:not(:disabled) {
   background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.10));
   color: var(--dsw-alias-label-primary, inherit);
@@ -69,6 +48,19 @@ export function injectStyles(): void {
 .dbk-dot-live {
   background: var(--dsw-alias-state-error-primary, #e5484d);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-error-primary, #e5484d) 18%, transparent);
+}
+.dbk-trigger-attention {
+  border-color: #d99a00;
+  background: rgba(245, 166, 35, .10);
+  color: #b77900;
+}
+.dbk-trigger-attention:hover:not(:disabled) {
+  background: rgba(245, 166, 35, .16);
+  color: #9a6700;
+}
+.dbk-dot-attention {
+  background: #f5a623;
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, .18);
 }
 .dbk-backdrop {
   position: fixed;
@@ -251,11 +243,11 @@ export function injectStyles(): void {
 }
 .dbk-button:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.10)); }
 .dbk-button-primary {
-  border-color: var(--dsw-alias-brand-primary, #315efb);
-  background: var(--dsw-alias-brand-primary, #315efb);
-  color: white;
+  border-color: #4d6bfe;
+  background: #4d6bfe;
+  color: #fff;
 }
-.dbk-button-primary:hover:not(:disabled) { filter: brightness(1.05); background: var(--dsw-alias-brand-primary, #315efb); }
+.dbk-button-primary:hover:not(:disabled) { border-color: #3c5bea; background: #3c5bea; color: #fff; }
 .dbk-button-danger { color: var(--dsw-alias-state-error-primary, #c33); }
 .dbk-button:disabled { opacity: .5; cursor: default; }
 @media (max-width: 640px) {

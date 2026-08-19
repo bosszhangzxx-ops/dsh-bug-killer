@@ -359,6 +359,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
     }
 
     const statusLabel = labelFor(stored.stage, stored.failedTask)
+    const statusNeedsAttention = stored.stage === 'awaitingResolution'
     const statusLive = stored.stage === 'instrumenting'
       || stored.stage === 'checkingLog'
       || stored.stage === 'settlingLogs'
@@ -368,42 +369,20 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       'button',
       {
         type: 'button',
-        className: 'dbk-trigger',
+        className: `dbk-trigger${statusNeedsAttention ? ' dbk-trigger-attention' : ''}`,
         disabled: props.input.phase !== 'plain',
         title: '自动埋点、采集日志并交给 DSH 修复',
         onClick: () => {
           setError('')
-          if (stored.stage === 'awaitingResolution' || stored.stage === 'cleaning') return
+          if (stored.stage === 'cleaning') return
           setOpen(true)
         },
       },
-      h('span', { className: `dbk-dot${statusLive ? ' dbk-dot-live' : ''}` }),
+      h('span', { className: `dbk-dot${statusLive ? ' dbk-dot-live' : ''}${statusNeedsAttention ? ' dbk-dot-attention' : ''}` }),
       h('span', null, `Bug Killer${statusLabel === '' ? '' : ` · ${statusLabel}`}`),
     )
 
-    const resultDrawer = stored.stage === 'awaitingResolution'
-      ? h(
-          'div',
-          { className: 'dbk-result-drawer', role: 'dialog', 'aria-label': '确认问题是否解决' },
-          h('p', { className: 'dbk-result-question' }, '刚才的问题解决了吗？'),
-          error === '' ? null : h('p', { className: 'dbk-result-error', role: 'alert' }, error),
-          h(
-            'div',
-            { className: 'dbk-result-actions' },
-            h('button', { type: 'button', className: 'dbk-button', onClick: confirmUnresolved }, '未解决'),
-            h('button', { type: 'button', className: 'dbk-button dbk-button-primary', onClick: confirmResolved }, '已解决'),
-          ),
-        )
-      : stored.stage === 'cleaning'
-        ? h(
-            'div',
-            { className: 'dbk-result-drawer', role: 'status' },
-            h('p', { className: 'dbk-result-question' }, '正在清理本次临时日志埋点…'),
-          )
-        : null
-    const triggerShell = h('div', { className: 'dbk-trigger-shell' }, trigger, resultDrawer)
-
-    if (!open) return triggerShell
+    if (!open) return trigger
 
     const modal = h(
       'div',
@@ -460,6 +439,8 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           startTracking,
           startReproduction,
           finishReproduction,
+          confirmUnresolved,
+          confirmResolved,
           retryCleanup: confirmResolved,
           reset,
           close: () => setOpen(false),
@@ -467,7 +448,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       ),
     )
 
-    return h(React.Fragment, null, triggerShell, modal)
+    return h(React.Fragment, null, trigger, modal)
   }
 }
 
@@ -542,7 +523,7 @@ function renderBody(
       'div',
       { className: 'dbk-card' },
       h('div', { className: 'dbk-live-row' }, h('span', { className: 'dbk-dot dbk-dot-live' }), options.running ? 'DSH 正在根据日志定位并修复' : '正在提交日志证据'),
-      h('p', null, '修复任务已经自动发送。完成修复和检查后，DSH 会自动删除本次临时埋点与临时日志配置。'),
+      h('p', null, '修复任务已经自动发送。完成后，Bug Killer 会进入“待确认”状态，由你确认问题是否解决。'),
     )
   }
 
@@ -551,7 +532,7 @@ function renderBody(
       'div',
       { className: 'dbk-card' },
       h('h3', { className: 'dbk-card-title' }, '请确认刚才的问题是否解决'),
-      h('p', null, '请使用 Bug Killer 按钮下方的“已解决”或“未解决”继续。'),
+      h('p', null, '如果问题仍然存在，可以继续复现并提交新的日志；如果已经解决，可以删除本次临时埋点日志。'),
     )
   }
 
@@ -662,6 +643,8 @@ function renderFooter(
     startTracking(): Promise<void>
     startReproduction(): Promise<void>
     finishReproduction(): Promise<void>
+    confirmUnresolved(): void
+    confirmResolved(): void
     retryCleanup(): void
     reset(): Promise<void>
     close(): void
@@ -697,7 +680,12 @@ function renderFooter(
     right = [button('取消', actions.close, '', false), button('正在等待日志…', () => {}, 'primary', true)]
   } else if (stage === 'fixing') {
     right = [button('关闭', actions.close)]
-  } else if (stage === 'awaitingResolution' || stage === 'cleaning') {
+  } else if (stage === 'awaitingResolution') {
+    right = [
+      button('未解决', actions.confirmUnresolved, '', false),
+      button('已解决，并删除埋点日志', actions.confirmResolved, 'primary'),
+    ]
+  } else if (stage === 'cleaning') {
     right = [button('关闭', actions.close)]
   } else if (stage === 'failed') {
     right = failedTask === 'cleanup'
