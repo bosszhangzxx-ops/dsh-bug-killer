@@ -1,0 +1,10 @@
+# Host-only development overlay. Replace the path below with this repository's
+# absolute path. The browser half must still be installed into the web profile
+# to be discovered from package.json's dsh.client declaration.
+- insert:
+    - id: dsh-bug-killer
+      name: '/absolute/path/to/dsh-bug-killer/src/index.ts'
+      config:
+        maxCaptureBytes: 1048576
+        maxDiscoveryDepth: 4
+        redactSecrets: true

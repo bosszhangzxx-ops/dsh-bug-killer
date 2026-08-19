@@ -1,0 +1,7 @@
+- insert:
+    - id: dsh-bug-killer
+      name: dsh-bug-killer
+      config:
+        maxCaptureBytes: 1048576
+        maxDiscoveryDepth: 4
+        redactSecrets: true
