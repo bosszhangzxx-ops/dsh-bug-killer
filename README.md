@@ -15,9 +15,10 @@ English | [简体中文](README.zh.md)
 5. When DSH finishes, Bug Killer opens automatically. Restart the application and click **Restarted**.
 6. The plugin waits until the log file is stable, records its byte offset, and asks you to reproduce the issue.
 7. Click **Reproduced**. Bug Killer waits for pending log writes to settle, reads only bytes written after the offset, and automatically sends a guarded diagnosis task to DSH.
-8. DSH fixes the issue, runs relevant checks, and removes only the temporary instrumentation associated with this trace ID.
+8. When DSH finishes its repair attempt, a small drawer under Bug Killer asks whether the issue is solved.
+9. Click **Not solved** to keep the instrumentation and repeat the restart/reproduction loop, or **Solved** to let DSH remove this trace's temporary instrumentation and reset Bug Killer.
 
-Bug Killer itself does not edit application code. It submits two explicit DSH tasks after the user's **Start tracing** and **Reproduced** clicks; DSH performs and reports the code changes.
+Bug Killer itself does not edit application code. It submits explicit DSH tasks after **Start tracing**, **Reproduced**, and—only after confirmation—**Solved**; DSH performs and reports the code changes.
 
 ## Highlights
 
@@ -25,6 +26,7 @@ Bug Killer itself does not edit application code. It submits two explicit DSH ta
 - A workspace-bounded project-folder picker for multi-project working directories.
 - Technology-neutral project and logging discovery before instrumentation.
 - Guided restart/reproduction dialogs that open when the DSH task settles.
+- A post-repair **Solved / Not solved** drawer; unsuccessful attempts retain instrumentation for another evidence cycle.
 - Log-file polling before capture and after reproduction to avoid racing buffered writes.
 - Workspace-scoped `.log` discovery.
 - Byte-offset incremental capture with truncation/rotation recovery.

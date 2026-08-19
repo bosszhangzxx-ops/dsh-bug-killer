@@ -105,5 +105,5 @@ function failure(
 export { LogCaptureManager } from './log-capture.ts'
 export { listProjectDirectories, resolveProjectDirectory } from './project-directory.ts'
 export { redactLogSecrets, resolveWorkspaceFile } from './security.ts'
-export { buildDiagnosisPrompt, buildInstrumentationPrompt } from './prompts.ts'
+export { buildCleanupPrompt, buildDiagnosisPrompt, buildInstrumentationPrompt } from './prompts.ts'
 export type * from './contracts.ts'

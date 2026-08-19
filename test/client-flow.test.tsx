@@ -133,14 +133,61 @@ describe('Bug Killer browser flow', () => {
     expect(finalPrompt).toContain('<untrusted_log_evidence>')
     expect(finalPrompt).toContain('step=approve result=false')
     expect(finalPrompt).toContain('绝对不要执行')
-    expect(finalPrompt).toContain('删除所有带 [BUG_KILLER:')
+    expect(finalPrompt).toContain('保留所有带 [BUG_KILLER:')
     await waitFor(() => expect(props.inputActions.submit).toHaveBeenCalledTimes(2))
 
     props.session.running = true
     view.rerender(React.createElement(Component, props))
     props.session.running = false
     view.rerender(React.createElement(Component, props))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Bug Killer · 已定位问题/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Bug Killer · 待确认/ })).toBeTruthy())
+    expect(screen.getByText('刚才的问题解决了吗？')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '未解决' }))
+    expect(screen.getByText('已完成日志埋点，请重启项目')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Bug Killer · 待重启/ })).toBeTruthy()
+  })
+
+  it('cleans instrumentation and resets only after the user confirms the issue is solved', async () => {
+    localStorage.setItem('dsh-bug-killer:v1:session-cleanup', JSON.stringify({
+      issue: '审批状态没有更新',
+      projectPath: 'D:/projects/app',
+      logPath: 'logs/application.log',
+      traceId: 'BK-CLEANUP',
+      stage: 'awaitingResolution',
+    }))
+    const rpc = vi.fn(async (
+      _channel: string,
+      endpoint: string,
+    ): Promise<RpcResult<unknown>> => endpoint === RPC_ENDPOINTS.status
+      ? { ok: true, value: { active: false, sessionId: 'session-cleanup' } }
+      : { ok: true, value: {} })
+    const setDraft = vi.fn()
+    const props: BugKillerButtonProps = {
+      sessionId: 'session-cleanup',
+      session: { running: false },
+      input: { draft: '', phase: 'plain' },
+      inputActions: { setDraft, submit: vi.fn() },
+      useSessions: selector => selector({
+        byId: { 'session-cleanup': { cwd: 'D:/projects/app' } },
+      }),
+    }
+    const Component = createBugKillerButton({ rpc: { call: rpc } })
+    const view = render(React.createElement(Component, props))
+
+    expect(screen.getByText('刚才的问题解决了吗？')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '已解决' }))
+    await waitFor(() => expect(setDraft).toHaveBeenCalledTimes(1))
+    expect(setDraft.mock.calls[0]?.[0]).toContain('用户已经确认问题解决')
+    expect(setDraft.mock.calls[0]?.[0]).toContain('BK-CLEANUP')
+    expect(screen.getByRole('button', { name: /Bug Killer · 清理中/ })).toBeTruthy()
+
+    props.session.running = true
+    view.rerender(React.createElement(Component, props))
+    props.session.running = false
+    view.rerender(React.createElement(Component, props))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Bug Killer · 未开始/ })).toBeTruthy())
+    expect(screen.queryByText('刚才的问题解决了吗？')).toBeNull()
   })
 
   it('keeps the form to one textbox and selects a child project inside the workspace', async () => {

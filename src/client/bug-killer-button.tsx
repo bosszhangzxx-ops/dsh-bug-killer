@@ -10,6 +10,7 @@ import {
   type LogProbeResult,
 } from '../contracts.ts'
 import {
+  buildCleanupPrompt,
   buildDiagnosisPrompt,
   buildInstrumentationPrompt,
   createTraceId,
@@ -17,7 +18,7 @@ import {
 } from '../prompts.ts'
 import type { BugKillerButtonProps, ClientConnectionLike } from './types.ts'
 
-type Stage = 'setup' | 'instrumenting' | 'restartRequired' | 'checkingLog' | 'capturing' | 'settlingLogs' | 'noIssue' | 'fixing' | 'complete' | 'failed'
+type Stage = 'setup' | 'instrumenting' | 'restartRequired' | 'checkingLog' | 'capturing' | 'settlingLogs' | 'noIssue' | 'fixing' | 'awaitingResolution' | 'cleaning' | 'failed'
 
 interface StoredState {
   issue: string
@@ -26,7 +27,7 @@ interface StoredState {
   traceId: string
   stage: Stage
   captureStartOffset?: number
-  failedTask?: 'instrumentation' | 'diagnosis'
+  failedTask?: 'instrumentation' | 'diagnosis' | 'cleanup'
   startedAt?: number
 }
 
@@ -50,6 +51,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
     const [error, setError] = React.useState('')
     const instrumentationRan = React.useRef(false)
     const diagnosisRan = React.useRef(false)
+    const cleanupRan = React.useRef(false)
 
     React.useEffect(() => {
       if (cwd === '') return
@@ -80,9 +82,25 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           diagnosisRan.current = false
           setStored(current => current.stage === 'fixing'
             ? props.session.promptError == null
-              ? { ...current, stage: 'complete' }
+              ? { ...current, stage: 'awaitingResolution' }
               : { ...current, stage: 'failed', failedTask: 'diagnosis' }
             : current)
+        }
+      }
+      if (stored.stage === 'cleaning') {
+        if (props.session.running) cleanupRan.current = true
+        if (!props.session.running && cleanupRan.current) {
+          cleanupRan.current = false
+          if (props.session.promptError == null) {
+            setStored(current => ({ ...EMPTY_STATE, projectPath: current.projectPath }))
+            clearState(props.sessionId)
+            setOpen(false)
+          } else {
+            setStored(current => current.stage === 'cleaning'
+              ? { ...current, stage: 'failed', failedTask: 'cleanup' }
+              : current)
+            setOpen(true)
+          }
         }
       }
     }, [props.session.promptError, props.session.running, stored.stage])
@@ -309,11 +327,43 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       setDirectoryPickerOpen(false)
     }
 
-    const statusLabel = labelFor(stored.stage)
+    const confirmResolved = (): void => {
+      if (props.session.running || !composerIsEmpty(props)) {
+        setError('当前 DSH 会话还不能提交清理任务，请等待输入框恢复空闲后重试。')
+        return
+      }
+      const description: BugDescription = {
+        issue: stored.issue,
+        projectPath: stored.projectPath,
+        logPath: stored.logPath,
+        traceId: stored.traceId,
+      }
+      cleanupRan.current = false
+      setStored(current => {
+        const next: StoredState = { ...current, stage: 'cleaning' }
+        delete next.failedTask
+        return next
+      })
+      submitPrompt(props, buildCleanupPrompt(description))
+    }
+
+    const confirmUnresolved = (): void => {
+      setError('')
+      setStored(current => {
+        const next: StoredState = { ...current, stage: 'restartRequired' }
+        delete next.startedAt
+        delete next.captureStartOffset
+        return next
+      })
+      setOpen(true)
+    }
+
+    const statusLabel = labelFor(stored.stage, stored.failedTask)
     const statusLive = stored.stage === 'instrumenting'
       || stored.stage === 'checkingLog'
       || stored.stage === 'settlingLogs'
       || stored.stage === 'fixing'
+      || stored.stage === 'cleaning'
     const trigger = h(
       'button',
       {
@@ -323,6 +373,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
         title: '自动埋点、采集日志并交给 DSH 修复',
         onClick: () => {
           setError('')
+          if (stored.stage === 'awaitingResolution' || stored.stage === 'cleaning') return
           setOpen(true)
         },
       },
@@ -330,7 +381,29 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       h('span', null, `Bug Killer${statusLabel === '' ? '' : ` · ${statusLabel}`}`),
     )
 
-    if (!open) return trigger
+    const resultDrawer = stored.stage === 'awaitingResolution'
+      ? h(
+          'div',
+          { className: 'dbk-result-drawer', role: 'dialog', 'aria-label': '确认问题是否解决' },
+          h('p', { className: 'dbk-result-question' }, '刚才的问题解决了吗？'),
+          error === '' ? null : h('p', { className: 'dbk-result-error', role: 'alert' }, error),
+          h(
+            'div',
+            { className: 'dbk-result-actions' },
+            h('button', { type: 'button', className: 'dbk-button', onClick: confirmUnresolved }, '未解决'),
+            h('button', { type: 'button', className: 'dbk-button dbk-button-primary', onClick: confirmResolved }, '已解决'),
+          ),
+        )
+      : stored.stage === 'cleaning'
+        ? h(
+            'div',
+            { className: 'dbk-result-drawer', role: 'status' },
+            h('p', { className: 'dbk-result-question' }, '正在清理本次临时日志埋点…'),
+          )
+        : null
+    const triggerShell = h('div', { className: 'dbk-trigger-shell' }, trigger, resultDrawer)
+
+    if (!open) return triggerShell
 
     const modal = h(
       'div',
@@ -383,17 +456,18 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
             closeDirectoryPicker: () => setDirectoryPickerOpen(false),
           }),
         ),
-        renderFooter(h, stored.stage, busy, {
+        renderFooter(h, stored.stage, stored.failedTask, busy, {
           startTracking,
           startReproduction,
           finishReproduction,
+          retryCleanup: confirmResolved,
           reset,
           close: () => setOpen(false),
         }),
       ),
     )
 
-    return h(React.Fragment, null, trigger, modal)
+    return h(React.Fragment, null, triggerShell, modal)
   }
 }
 
@@ -472,13 +546,21 @@ function renderBody(
     )
   }
 
-  if (state.stage === 'complete') {
+  if (state.stage === 'awaitingResolution') {
     return h(
       'div',
       { className: 'dbk-card' },
-      h('h3', { className: 'dbk-card-title' }, '本次修复任务已完成'),
-      h('p', null, 'DSH 已结束修复流程，并按任务要求检查和清理本次追踪标识对应的临时埋点。你可以查看会话中的修复结果。'),
-      summaryCard(h, state),
+      h('h3', { className: 'dbk-card-title' }, '请确认刚才的问题是否解决'),
+      h('p', null, '请使用 Bug Killer 按钮下方的“已解决”或“未解决”继续。'),
+    )
+  }
+
+  if (state.stage === 'cleaning') {
+    return h(
+      'div',
+      { className: 'dbk-card' },
+      h('h3', { className: 'dbk-card-title' }, '正在清理临时日志埋点'),
+      h('p', null, '清理完成后 Bug Killer 会自动恢复到初始状态。'),
     )
   }
 
@@ -486,10 +568,14 @@ function renderBody(
     return h(
       'div',
       { className: 'dbk-card' },
-      h('h3', { className: 'dbk-card-title' }, state.failedTask === 'diagnosis' ? '修复任务未正常完成' : '埋点任务未正常完成'),
-      h('p', null, state.failedTask === 'diagnosis'
-        ? '请查看 DSH 会话里的错误。任务中断时临时埋点可能尚未清理，接受代码前请搜索本次追踪标识。'
-        : '请查看 DSH 会话里的错误。本次追踪没有进入复现阶段。'),
+      h('h3', { className: 'dbk-card-title' }, state.failedTask === 'cleanup'
+        ? '清理任务未正常完成'
+        : state.failedTask === 'diagnosis' ? '修复任务未正常完成' : '埋点任务未正常完成'),
+      h('p', null, state.failedTask === 'cleanup'
+        ? '请查看 DSH 会话里的错误。本次临时埋点可能仍有残留。'
+        : state.failedTask === 'diagnosis'
+          ? '请查看 DSH 会话里的错误，临时埋点仍然保留，可以修正后继续复现。'
+          : '请查看 DSH 会话里的错误。本次追踪没有进入复现阶段。'),
       summaryCard(h, state),
     )
   }
@@ -570,11 +656,13 @@ function directoryPicker(
 function renderFooter(
   h: typeof React.createElement,
   stage: Stage,
+  failedTask: StoredState['failedTask'],
   busy: boolean,
   actions: {
     startTracking(): Promise<void>
     startReproduction(): Promise<void>
     finishReproduction(): Promise<void>
+    retryCleanup(): void
     reset(): Promise<void>
     close(): void
   },
@@ -609,8 +697,12 @@ function renderFooter(
     right = [button('取消', actions.close, '', false), button('正在等待日志…', () => {}, 'primary', true)]
   } else if (stage === 'fixing') {
     right = [button('关闭', actions.close)]
+  } else if (stage === 'awaitingResolution' || stage === 'cleaning') {
+    right = [button('关闭', actions.close)]
   } else if (stage === 'failed') {
-    right = [button('关闭', actions.close), button('追踪新问题', () => { void actions.reset() }, 'primary')]
+    right = failedTask === 'cleanup'
+      ? [button('关闭', actions.close), button('重新清理', actions.retryCleanup, 'primary')]
+      : [button('关闭', actions.close), button('追踪新问题', () => { void actions.reset() }, 'primary')]
   } else {
     right = [button('关闭', actions.close), button('追踪新问题', () => { void actions.reset() }, 'primary')]
   }
@@ -682,14 +774,16 @@ function composerIsEmpty(props: BugKillerButtonProps): boolean {
   return props.input.phase === 'plain' && props.input.draft.trim() === ''
 }
 
-function labelFor(stage: Stage): string {
+function labelFor(stage: Stage, failedTask?: StoredState['failedTask']): string {
   if (stage === 'setup') return '未开始'
   if (stage === 'instrumenting') return '埋点中'
   if (stage === 'restartRequired') return '待重启'
   if (stage === 'checkingLog' || stage === 'settlingLogs') return '检查日志'
   if (stage === 'capturing' || stage === 'noIssue') return '未发现问题'
-  if (stage === 'fixing' || stage === 'complete') return '已定位问题'
-  if (stage === 'failed') return '执行异常'
+  if (stage === 'fixing') return '已定位问题'
+  if (stage === 'awaitingResolution') return '待确认'
+  if (stage === 'cleaning') return '清理中'
+  if (stage === 'failed') return failedTask === 'cleanup' ? '清理异常' : '执行异常'
   return ''
 }
 
@@ -743,11 +837,13 @@ function isStoredState(value: unknown): value is StoredState {
       || candidate.stage === 'settlingLogs'
       || candidate.stage === 'noIssue'
       || candidate.stage === 'fixing'
-      || candidate.stage === 'complete'
+      || candidate.stage === 'awaitingResolution'
+      || candidate.stage === 'cleaning'
       || candidate.stage === 'failed')
     && (candidate.failedTask === undefined
       || candidate.failedTask === 'instrumentation'
-      || candidate.failedTask === 'diagnosis')
+      || candidate.failedTask === 'diagnosis'
+      || candidate.failedTask === 'cleanup')
     && (candidate.startedAt === undefined || typeof candidate.startedAt === 'number')
     && (candidate.captureStartOffset === undefined || typeof candidate.captureStartOffset === 'number')
 }

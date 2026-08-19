@@ -24,6 +24,27 @@ export function injectStyles(): void {
   font-size: 12px;
   cursor: pointer;
 }
+.dbk-trigger-shell { position: relative; display: inline-flex; align-items: center; }
+.dbk-result-drawer {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 1001;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.28));
+  border-radius: 11px;
+  background: var(--dsw-alias-bg-layer-3, #fff);
+  color: var(--dsw-alias-label-primary, #171717);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .22);
+}
+.dbk-result-question { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.5; }
+.dbk-result-error { margin: 0; color: var(--dsw-alias-state-error-primary, #b22); font-size: 11px; line-height: 1.5; }
+.dbk-result-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dbk-result-actions .dbk-button { min-height: 32px; padding: 5px 12px; }
 .dbk-trigger:hover:not(:disabled) {
   background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.10));
   color: var(--dsw-alias-label-primary, inherit);

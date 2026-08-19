@@ -19,14 +19,14 @@
 - Common credentials and authorization values are redacted before the result crosses into the browser.
 - Captured lines are escaped, prefixed as evidence, and wrapped in an explicit untrusted-data section.
 - Generated prompts forbid following instructions from logs, accessing paths outside the workspace, destructive commands, and unrelated refactors.
-- Clicking **Start tracing** authorizes the instrumentation task; clicking **Reproduced** authorizes the diagnosis and fix task. The browser writes each prompt through `inputActions.setDraft()` and then calls `submit()` automatically.
+- Clicking **Start tracing** authorizes instrumentation; **Reproduced** authorizes diagnosis and repair; **Solved** authorizes removal of this trace's temporary instrumentation. The browser writes each prompt through `inputActions.setDraft()` and then calls `submit()` automatically.
 
 ## Deliberate limitations
 
 - Redaction is defense in depth, not a guarantee that every application-specific secret format will be recognized.
 - Prompt-injection framing reduces risk but cannot make an LLM mathematically immune to malicious text. Review DSH's code diff and test results before accepting a fix.
 - The plugin reads file logs only. It does not attach to IntelliJ console output, JVM memory, a production host, Docker, Kubernetes, or remote log platforms.
-- The diagnosis task tells DSH to remove all instrumentation carrying the current trace ID after the fix. If DSH is interrupted, use Git and search that trace ID before accepting the diff.
+- Diagnosis keeps instrumentation until the user verifies the result. The separate cleanup task removes entries carrying the current trace ID only after **Solved**; if cleanup is interrupted, the UI reports a cleanup error and the trace ID remains available for a manual search.
 
 ## Reporting a vulnerability
 
