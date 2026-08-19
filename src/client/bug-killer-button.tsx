@@ -108,11 +108,16 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
     React.useEffect(() => {
       if (!open) return
       const listener = (event: KeyboardEvent): void => {
-        if (event.key === 'Escape' && !busy) setOpen(false)
+        if (event.key !== 'Escape' || busy) return
+        if (directoryPickerOpen) {
+          setDirectoryPickerOpen(false)
+          return
+        }
+        setOpen(false)
       }
       document.addEventListener('keydown', listener)
       return () => document.removeEventListener('keydown', listener)
-    }, [open, busy])
+    }, [open, busy, directoryPickerOpen])
 
     React.useEffect(() => {
       const controller = new AbortController()
@@ -389,7 +394,10 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
       {
         className: 'dbk-backdrop',
         onMouseDown: (event: React.MouseEvent<HTMLDivElement>) => {
-          if (event.target === event.currentTarget && !busy) setOpen(false)
+          if (event.target === event.currentTarget && !busy) {
+            setDirectoryPickerOpen(false)
+            setOpen(false)
+          }
         },
       },
       h(
@@ -416,7 +424,10 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
               className: 'dbk-icon-button',
               'aria-label': '关闭',
               disabled: busy,
-              onClick: () => setOpen(false),
+              onClick: () => {
+                setDirectoryPickerOpen(false)
+                setOpen(false)
+              },
             },
             '×',
           ),
@@ -428,11 +439,7 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           renderBody(h, stored, patchStored, {
             cwd,
             running: props.session.running,
-            directoryListing,
-            directoryPickerOpen,
             browseDirectory,
-            chooseDirectory,
-            closeDirectoryPicker: () => setDirectoryPickerOpen(false),
           }),
         ),
         renderFooter(h, stored.stage, stored.failedTask, busy, {
@@ -443,8 +450,19 @@ export function createBugKillerButton(connection: ClientConnectionLike) {
           confirmResolved,
           retryCleanup: confirmResolved,
           reset,
-          close: () => setOpen(false),
+          close: () => {
+            setDirectoryPickerOpen(false)
+            setOpen(false)
+          },
         }),
+        directoryPickerOpen && directoryListing !== undefined
+          ? directoryPicker(h, directoryListing, {
+              busy,
+              browseDirectory,
+              chooseDirectory,
+              closeDirectoryPicker: () => setDirectoryPickerOpen(false),
+            })
+          : null,
       ),
     )
 
@@ -459,11 +477,7 @@ function renderBody(
   options: {
     cwd: string
     running: boolean
-    directoryListing: DirectoryListing | undefined
-    directoryPickerOpen: boolean
     browseDirectory(directory: string): Promise<void>
-    chooseDirectory(): void
-    closeDirectoryPicker(): void
   },
 ): React.ReactNode {
   if (state.stage === 'capturing' || state.stage === 'noIssue') {
@@ -588,9 +602,6 @@ function renderBody(
       ),
       h('p', { className: 'dbk-help' }, '只能选择当前 DSH 工作目录本身或它下面的子目录。'),
     ),
-    options.directoryPickerOpen && options.directoryListing !== undefined
-      ? directoryPicker(h, options.directoryListing, options)
-      : null,
   )
 }
 
@@ -598,6 +609,7 @@ function directoryPicker(
   h: typeof React.createElement,
   listing: DirectoryListing,
   actions: {
+    busy: boolean
     browseDirectory(directory: string): Promise<void>
     chooseDirectory(): void
     closeDirectoryPicker(): void
@@ -605,31 +617,62 @@ function directoryPicker(
 ): React.ReactNode {
   return h(
     'div',
-    { className: 'dbk-directory-picker' },
-    h('p', { className: 'dbk-directory-current', title: listing.currentPath }, listing.currentPath),
+    {
+      className: 'dbk-directory-overlay',
+      onMouseDown: (event: React.MouseEvent<HTMLDivElement>) => {
+        if (event.target === event.currentTarget && !actions.busy) actions.closeDirectoryPicker()
+      },
+    },
     h(
-      'div',
-      { className: 'dbk-directory-list' },
-      listing.parentPath === undefined ? null : h('button', {
-        type: 'button',
-        className: 'dbk-directory-entry',
-        onClick: () => { void actions.browseDirectory(listing.parentPath ?? listing.rootPath) },
-      }, '↰ 上一级'),
-      ...listing.directories.map(directory => h('button', {
-        key: directory.path,
-        type: 'button',
-        className: 'dbk-directory-entry',
-        onClick: () => { void actions.browseDirectory(directory.path) },
-      }, `▸ ${directory.name}`)),
-      listing.directories.length === 0
-        ? h('p', { className: 'dbk-help' }, '这个目录下没有可选的子目录。')
-        : null,
-    ),
-    h(
-      'div',
-      { className: 'dbk-directory-actions' },
-      h('button', { type: 'button', className: 'dbk-button', onClick: actions.closeDirectoryPicker }, '取消'),
-      h('button', { type: 'button', className: 'dbk-button dbk-button-primary', onClick: actions.chooseDirectory }, '选择此目录'),
+      'section',
+      {
+        className: 'dbk-directory-picker',
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': 'dbk-directory-title',
+      },
+      h(
+        'header',
+        { className: 'dbk-directory-header' },
+        h('h3', { id: 'dbk-directory-title', className: 'dbk-directory-title' }, '选择项目文件夹'),
+        h('p', { className: 'dbk-directory-current', title: listing.currentPath }, listing.currentPath),
+      ),
+      h(
+        'div',
+        { className: 'dbk-directory-list' },
+        listing.parentPath === undefined ? null : h('button', {
+          type: 'button',
+          className: 'dbk-directory-entry',
+          disabled: actions.busy,
+          onClick: () => { void actions.browseDirectory(listing.parentPath ?? listing.rootPath) },
+        }, '↰ 上一级'),
+        ...listing.directories.map(directory => h('button', {
+          key: directory.path,
+          type: 'button',
+          className: 'dbk-directory-entry',
+          disabled: actions.busy,
+          onClick: () => { void actions.browseDirectory(directory.path) },
+        }, `▸ ${directory.name}`)),
+        listing.directories.length === 0
+          ? h('p', { className: 'dbk-directory-empty' }, '这个目录下没有可选的子目录。')
+          : null,
+      ),
+      h(
+        'footer',
+        { className: 'dbk-directory-actions' },
+        h('button', {
+          type: 'button',
+          className: 'dbk-directory-action dbk-directory-action-cancel',
+          disabled: actions.busy,
+          onClick: actions.closeDirectoryPicker,
+        }, '取消'),
+        h('button', {
+          type: 'button',
+          className: 'dbk-directory-action dbk-directory-action-confirm',
+          disabled: actions.busy,
+          onClick: actions.chooseDirectory,
+        }, '选择子目录'),
+      ),
     ),
   )
 }

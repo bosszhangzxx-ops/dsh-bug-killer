@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RPC_ENDPOINTS, type RpcResult } from '../src/contracts.ts'
 import { createBugKillerButton } from '../src/client/bug-killer-button.tsx'
@@ -236,11 +236,23 @@ describe('Bug Killer browser flow', () => {
     expect(screen.getByText(root)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '更改' }))
-    fireEvent.click(await screen.findByRole('button', { name: '▸ api' }))
+    let picker = await screen.findByRole('dialog', { name: '选择项目文件夹' })
+    expect(picker.className).toBe('dbk-directory-picker')
+    const compactCancel = within(picker).getByRole('button', { name: '取消' })
+    expect(compactCancel.className).toContain('dbk-directory-action-cancel')
+    fireEvent.click(compactCancel)
+    expect(screen.queryByRole('dialog', { name: '选择项目文件夹' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '更改' }))
+    picker = await screen.findByRole('dialog', { name: '选择项目文件夹' })
+    fireEvent.click(within(picker).getByRole('button', { name: '▸ api' }))
     await screen.findByText(child)
-    fireEvent.click(screen.getByRole('button', { name: '选择此目录' }))
+    const chooseButton = within(picker).getByRole('button', { name: '选择子目录' })
+    expect(chooseButton.className).toContain('dbk-directory-action-confirm')
+    fireEvent.click(chooseButton)
 
     expect(screen.getByText(child)).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: '选择项目文件夹' })).toBeNull()
     expect(rpc).toHaveBeenCalledWith(
       '/bug-killer',
       RPC_ENDPOINTS.listDirectories,
