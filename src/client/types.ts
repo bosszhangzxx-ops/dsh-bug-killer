@@ -44,6 +44,11 @@ export interface SessionSummaryLike {
   cwd?: string
 }
 
+export interface ConversationSessionLike {
+  running: boolean
+  promptError?: unknown
+}
+
 export interface SessionListStateLike {
   byId: Record<string, SessionSummaryLike>
 }
@@ -54,6 +59,7 @@ export type SessionSelectorHook = <Selected>(
 
 export interface BugKillerButtonProps {
   sessionId: string
+  session: ConversationSessionLike
   input: InputStateLike
   inputActions: InputActionsLike
   useSessions: SessionSelectorHook

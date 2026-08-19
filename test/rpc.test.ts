@@ -1,3 +1,5 @@
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RPC_ENDPOINTS } from '../src/contracts.ts'
 import { createRpcHandler } from '../src/index.ts'
@@ -29,5 +31,22 @@ describe('host RPC boundary', () => {
     controller.abort()
     const result = await handler(RPC_ENDPOINTS.discover, { cwd: 'D:/missing' }, controller.signal)
     expect(result).toMatchObject({ ok: false, error: { code: 'cancelled' } })
+  })
+
+  it('lists project directories through the host boundary', async () => {
+    const workspace = await mkdtemp(path.join(process.cwd(), '.tmp-bug-killer-rpc-'))
+    try {
+      await mkdir(path.join(workspace, 'server'))
+      const result = await handler(RPC_ENDPOINTS.listDirectories, {
+        rootCwd: workspace,
+        directory: workspace,
+      }, new AbortController().signal)
+      expect(result).toMatchObject({
+        ok: true,
+        value: { directories: [{ name: 'server' }] },
+      })
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
   })
 })

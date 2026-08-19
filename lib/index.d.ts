@@ -4,6 +4,7 @@ import { Context } from "@deepseek-ai/cordis";
 declare const RPC_CHANNEL = "/bug-killer";
 declare const RPC_ENDPOINTS: {
   readonly health: "health";
+  readonly listDirectories: "directories/list";
   readonly discover: "logs/discover";
   readonly start: "capture/start";
   readonly finish: "capture/finish";
@@ -12,6 +13,17 @@ declare const RPC_ENDPOINTS: {
 };
 interface DiscoverLogsRequest {
   cwd: string;
+  rootCwd?: string;
+}
+interface ProjectDirectory {
+  name: string;
+  path: string;
+}
+interface DirectoryListing {
+  rootPath: string;
+  currentPath: string;
+  parentPath?: string;
+  directories: ProjectDirectory[];
 }
 interface DiscoveredLog {
   relativePath: string;
@@ -21,6 +33,7 @@ interface DiscoveredLog {
 interface StartCaptureRequest {
   sessionId: string;
   cwd: string;
+  rootCwd?: string;
   logPath: string;
 }
 interface FinishCaptureRequest {
@@ -88,6 +101,10 @@ declare class LogCaptureManager {
   private walk;
 }
 //#endregion
+//#region src/project-directory.d.ts
+declare function resolveProjectDirectory(rootInput: unknown, directoryInput: unknown): Promise<string>;
+declare function listProjectDirectories(rootInput: unknown, directoryInput: unknown): Promise<DirectoryListing>;
+//#endregion
 //#region src/security.d.ts
 declare function resolveWorkspaceFile(cwdInput: unknown, fileInput: unknown): Promise<{
   workspaceRoot: string;
@@ -99,8 +116,7 @@ declare function redactLogSecrets(input: string): string;
 //#region src/prompts.d.ts
 interface BugDescription {
   issue: string;
-  expected: string;
-  actual: string;
+  projectPath: string;
   logPath: string;
   traceId: string;
 }
@@ -131,4 +147,4 @@ declare module '@deepseek-ai/cordis' {
 declare function apply(ctx: Context, config: Config): void;
 declare function createRpcHandler(manager: LogCaptureManager): (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>;
 //#endregion
-export { type CaptureFinishResult, type CaptureStartResult, type CaptureStatusRequest, type CaptureStatusResult, Config, type DiscoverLogsRequest, type DiscoveredLog, type FinishCaptureRequest, LogCaptureManager, type RPC_CHANNEL, type RPC_ENDPOINTS, type RpcErrorShape, type RpcResult, type StartCaptureRequest, apply, buildDiagnosisPrompt, buildInstrumentationPrompt, createRpcHandler, inject, name, redactLogSecrets, resolveWorkspaceFile };
+export { type CaptureFinishResult, type CaptureStartResult, type CaptureStatusRequest, type CaptureStatusResult, Config, type DirectoryListing, type DiscoverLogsRequest, type DiscoveredLog, type FinishCaptureRequest, LogCaptureManager, type ProjectDirectory, type RPC_CHANNEL, type RPC_ENDPOINTS, type RpcErrorShape, type RpcResult, type StartCaptureRequest, apply, buildDiagnosisPrompt, buildInstrumentationPrompt, createRpcHandler, inject, listProjectDirectories, name, redactLogSecrets, resolveProjectDirectory, resolveWorkspaceFile };

@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { RPC_CHANNEL, RPC_ENDPOINTS, type RpcResult } from './contracts.ts'
 import { LogCaptureManager } from './log-capture.ts'
+import { listProjectDirectories, resolveProjectDirectory } from './project-directory.ts'
 import { BugKillerError } from './security.ts'
 
 export const name = 'dsh-bug-killer'
@@ -52,10 +53,16 @@ export function createRpcHandler(manager: LogCaptureManager) {
       switch (endpoint) {
         case RPC_ENDPOINTS.health:
           return success({ plugin: name, ready: true })
-        case RPC_ENDPOINTS.discover:
-          return success(await manager.discoverLogs(body.cwd))
-        case RPC_ENDPOINTS.start:
-          return success(await manager.start(body.sessionId, body.cwd, body.logPath))
+        case RPC_ENDPOINTS.listDirectories:
+          return success(await listProjectDirectories(body.rootCwd, body.directory))
+        case RPC_ENDPOINTS.discover: {
+          const projectCwd = await resolveProjectDirectory(body.rootCwd ?? body.cwd, body.cwd)
+          return success(await manager.discoverLogs(projectCwd))
+        }
+        case RPC_ENDPOINTS.start: {
+          const projectCwd = await resolveProjectDirectory(body.rootCwd ?? body.cwd, body.cwd)
+          return success(await manager.start(body.sessionId, projectCwd, body.logPath))
+        }
         case RPC_ENDPOINTS.finish:
           return success(await manager.finish(body.sessionId))
         case RPC_ENDPOINTS.cancel:
@@ -92,6 +99,7 @@ function failure(
 }
 
 export { LogCaptureManager } from './log-capture.ts'
+export { listProjectDirectories, resolveProjectDirectory } from './project-directory.ts'
 export { redactLogSecrets, resolveWorkspaceFile } from './security.ts'
 export { buildDiagnosisPrompt, buildInstrumentationPrompt } from './prompts.ts'
 export type * from './contracts.ts'

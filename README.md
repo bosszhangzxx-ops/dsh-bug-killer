@@ -9,19 +9,21 @@ English | [简体中文](README.zh.md)
 ## Workflow
 
 1. Click **Bug Killer** next to the DSH send button.
-2. Describe the issue, expected behavior, actual behavior, and Spring log file.
-3. Click **Start tracing**. The plugin puts a focused instrumentation prompt in the composer for you to review and send.
-4. Let DSH add temporary trace logs, then restart the local Spring service.
+2. Describe the issue and confirm the echoed project folder. If the DSH workspace contains multiple projects, choose one of its subdirectories.
+3. Click **Start tracing**. This click authorizes Bug Killer to send the instrumentation task to DSH automatically.
+4. DSH identifies the project type and logging setup, traces the relevant method chain, and adds temporary logs. Restart the application as instructed.
 5. Click **Start reproduction**. The host records the log file's current byte offset.
 6. Reproduce the business issue in your application.
-7. Click **Reproduced**. The host reads only bytes written after the offset and puts a guarded diagnosis prompt in the composer.
-8. Review and manually send the evidence to DSH.
+7. Click **Reproduced**. The host reads only bytes written after the offset and automatically sends a guarded diagnosis task to DSH.
+8. DSH fixes the issue, runs relevant checks, and removes only the temporary instrumentation associated with this trace ID.
 
-The plugin never auto-sends a prompt and never edits application code by itself.
+Bug Killer itself does not edit application code. It submits two explicit DSH tasks after the user's **Start tracing** and **Reproduced** clicks; DSH performs and reports the code changes.
 
 ## Highlights
 
-- Native DSH Web composer button and four-stage dialog.
+- Native DSH Web composer button with automatic task-completion tracking.
+- A workspace-bounded project-folder picker for multi-project working directories.
+- Technology-neutral project and logging discovery before instrumentation.
 - Workspace-scoped `.log` discovery.
 - Byte-offset incremental capture with truncation/rotation recovery.
 - Head-and-tail retention when a capture exceeds its size budget.
@@ -35,9 +37,9 @@ The plugin never auto-sends a prompt and never edits application code by itself.
 
 - Node.js `22.19+` or `24+`
 - DeepSeek Harness `0.1.0-rc.7` or a compatible release
-- A Spring log file inside the active DSH workspace
+- A local application whose file log can be placed inside the selected project folder
 
-Bug Killer cannot read the IntelliJ IDEA Run/Debug console. Configure file logging if the application currently logs only to the console:
+Bug Killer reads files rather than IDE or terminal consoles. If the application currently logs only to a console, the instrumentation task asks DSH to add a local-only file logger. For Spring Boot, that may look like:
 
 ```yaml
 logging:

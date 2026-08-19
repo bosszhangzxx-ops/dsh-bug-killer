@@ -2,6 +2,7 @@ export const RPC_CHANNEL = '/bug-killer'
 
 export const RPC_ENDPOINTS = {
   health: 'health',
+  listDirectories: 'directories/list',
   discover: 'logs/discover',
   start: 'capture/start',
   finish: 'capture/finish',
@@ -11,6 +12,19 @@ export const RPC_ENDPOINTS = {
 
 export interface DiscoverLogsRequest {
   cwd: string
+  rootCwd?: string
+}
+
+export interface ProjectDirectory {
+  name: string
+  path: string
+}
+
+export interface DirectoryListing {
+  rootPath: string
+  currentPath: string
+  parentPath?: string
+  directories: ProjectDirectory[]
 }
 
 export interface DiscoveredLog {
@@ -22,6 +36,7 @@ export interface DiscoveredLog {
 export interface StartCaptureRequest {
   sessionId: string
   cwd: string
+  rootCwd?: string
   logPath: string
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "dsh-bug-killer",
   "version": "0.1.0",
-  "description": "A DeepSeek Harness plugin that captures the right Spring logs while you reproduce a bug and brings the evidence back to your agent.",
+  "description": "A DeepSeek Harness plugin that instruments a bug path, captures reproduction logs, and sends the evidence back for an agentic fix.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -50,7 +50,7 @@
     "deepseek-harness",
     "dsh",
     "dsh-plugin",
-    "spring-boot",
+    "observability",
     "debugging",
     "logs"
   ],
